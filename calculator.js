@@ -470,8 +470,13 @@ function calculateGroupSequential(inputs) {
     const payoffC1     = (N - k - 1) * c1;
     const payoffIncome = payoffC2 + payoffC1 + monthlyDonorContrib;
 
-    // Any remaining fund balance from the saving overshoot is applied immediately.
+    // The saving-phase overshoot reduces the starting mortgage balance.
+    // If the overshoot fully covers the loan principal (including the 100% down
+    // payment case where loanPrincipal = 0), the excess carries to the next cycle.
     let mortgageBalance = Math.max(0, loanPrincipal - fundBalance);
+    if (fundBalance > loanPrincipal) {
+      carryover = fundBalance - loanPrincipal;
+    }
 
     while (mortgageBalance > 0) {
       if (month >= MAX_MONTHS) {
