@@ -990,23 +990,42 @@ a.nav__wordmark:hover {
   color: #555;
 }
 
-.ledger-formula {
-  color: #333;
+.ledger-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ledger-tip {
+  cursor: help;
+  border-bottom: 1px dotted #aaa;
+}
+
+.ledger-balance {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ledger-purchase-detail {
+  display: block;
+  font-size: 0.68rem;
+  color: #8B1A1A;
+}
+
+.ledger-phase {
+  font-size: 0.7rem;
+  color: #666;
+  font-style: italic;
+}
+
+.ledger-mortgages {
   font-size: 0.72rem;
+  line-height: 1.7;
+  font-variant-numeric: tabular-nums;
 }
 
 .ledger-pos {
   color: #1a6b1a;
   font-weight: 600;
-}
-
-.ledger-neg {
-  color: #8B1A1A;
-  font-weight: 600;
-}
-
-.ledger-interest {
-  color: #8B1A1A;
 }
 
 .ledger-extra {
@@ -1026,20 +1045,6 @@ a.nav__wordmark:hover {
 .ledger-paid-off {
   color: #aaa;
   font-style: italic;
-  text-align: center;
-}
-
-.ledger-mortgage-header {
-  background: #2e2e2e !important;
-  text-align: center;
-  border-left: 2px solid #555;
-}
-
-.ledger-subcols th {
-  background: #3a3a3a !important;
-  font-size: 0.68rem;
-  font-weight: 400;
-  color: #ccc;
 }
 
 .ledger-housed {
