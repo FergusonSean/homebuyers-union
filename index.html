@@ -490,23 +490,41 @@
         type:   k === 0 ? "parallel" : k === N ? "sequential" : "hybrid",
       })).filter(m => !m.result.error);
 
-      // Color best/worst within each row.
-      function tableRows(getValue, fmt) {
+      // Add traditional mortgage as the final column so it participates in
+      // green/red coloring. It has no ledger so it is excluded from buttons.
+      const trad = models[0].traditional;
+      const tradResult = {
+        positions: Array.from({ length: N }, () => ({
+          monthsUntilHoused: trad.monthsToSaveDown,
+          totalPaid:         trad.totalPaid,
+        })),
+        totalMonths: trad.monthsToSaveDown + inputs.termYears * 12,
+        error: null,
+      };
+      const allModelsWithTrad = [
+        ...allModels,
+        { key: "traditional", label: "Traditional", result: tradResult, type: "traditional" },
+      ];
+
+      const headerCells = allModelsWithTrad.map(m => `<th>${m.label}</th>`).join("");
+
+      // Combined rows: months until housed + total paid in each cell.
+      function tableRows() {
         return Array.from({ length: N }, (_, i) => {
-          const vals = allModels.map(m => getValue(m.result, i));
-          const min  = Math.min(...vals);
-          const max  = Math.max(...vals);
-          const cells = vals.map(v => {
-            const cls = v === min ? "cmp-better" : v === max ? "cmp-worse" : "";
-            return `<td class="${cls}">${fmt(v)}</td>`;
+          const monthVals = allModelsWithTrad.map(m => m.result.positions[i].monthsUntilHoused);
+          const paidVals  = allModelsWithTrad.map(m => m.result.positions[i].totalPaid);
+          const monthMin  = Math.min(...monthVals), monthMax = Math.max(...monthVals);
+          const paidMin   = Math.min(...paidVals),  paidMax  = Math.max(...paidVals);
+          const cells = allModelsWithTrad.map((m, j) => {
+            const mCls = monthVals[j] === monthMin ? "cmp-better" : monthVals[j] === monthMax ? "cmp-worse" : "";
+            const pCls = paidVals[j]  === paidMin  ? "cmp-better" : paidVals[j]  === paidMax  ? "cmp-worse" : "";
+            return `<td><span class="${mCls}">${formatMonths(monthVals[j])}</span><span class="ledger-sub ${pCls}">${formatDollars(paidVals[j])}</span></td>`;
           }).join("");
           return `<tr><td class="tbl-pos">Position ${i + 1}</td>${cells}</tr>`;
         }).join("");
       }
 
-      const headerCells = allModels.map(m => `<th>${m.label}</th>`).join("");
-
-      const totalVals = allModels.map(m => m.result.totalMonths);
+      const totalVals = allModelsWithTrad.map(m => m.result.totalMonths);
       const totalMin  = Math.min(...totalVals);
       const totalMax  = Math.max(...totalVals);
       const totalRow  = `<tr class="tbl-total"><td class="tbl-pos"><em>Group total</em></td>${
@@ -516,32 +534,19 @@
         }).join("")
       }</tr>`;
 
-      const trad = models[0].traditional;
-      const tradRow = `<tr class="tbl-trad"><td class="tbl-pos">Traditional</td>
-        <td colspan="${allModels.length}" style="text-align:center;font-style:italic">
-          ${formatMonths(trad.monthsToSaveDown)} to save + ${inputs.termYears} yr mortgage = ${formatDollars(trad.totalPaid)}
-        </td></tr>`;
-
       el.innerHTML = `
-        <p class="calc-note" style="margin-bottom:1rem">
+        <p class="calc-note" style="margin-bottom:0.5rem">
           <span class="cmp-better-key">Green</span> = best in row.
           <span class="cmp-worse-key">Red</span> = worst.
           "Seq. K" means the first K mortgages are paid off completely before switching to parallel for the rest.
+          Traditional = save down payment alone then carry a solo mortgage.
         </p>
+        <p class="calc-note" style="font-size:0.75rem;margin-bottom:1rem">Each cell: months until housed / total paid lifetime</p>
 
-        <h3 class="ledger-heading" style="margin-bottom:0.5rem">Months until housed</h3>
         <div class="tbl-wrapper">
           <table class="results-table">
             <thead><tr><th>Member</th>${headerCells}</tr></thead>
-            <tbody>${tableRows((r, i) => r.positions[i].monthsUntilHoused, formatMonths)}${totalRow}</tbody>
-          </table>
-        </div>
-
-        <h3 class="ledger-heading" style="margin-top:1.5rem;margin-bottom:0.5rem">Total paid (lifetime)</h3>
-        <div class="tbl-wrapper">
-          <table class="results-table">
-            <thead><tr><th>Member</th>${headerCells}</tr></thead>
-            <tbody>${tableRows((r, i) => r.positions[i].totalPaid, formatDollars)}${tradRow}</tbody>
+            <tbody>${tableRows()}${totalRow}</tbody>
           </table>
         </div>
 
