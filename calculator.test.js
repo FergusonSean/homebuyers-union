@@ -193,9 +193,9 @@ assert(
   withDonor.totalMonths <= withoutDonor.totalMonths
 );
 
-// ─── calculateGroup — 600-month cap ───────────────────────────────────────────
+// ─── calculateGroup — month cap ───────────────────────────────────────────────
 
-console.log("\ncalculateGroup — 600-month error cap:");
+console.log("\ncalculateGroup — month cap error:");
 
 // Pathological inputs: tiny c1, huge home price, zero c2 → fund never grows.
 const capped = calculateGroup({

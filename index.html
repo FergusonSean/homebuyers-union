@@ -340,7 +340,7 @@
       return parts.join(" + ");
     }
 
-    function renderLedger(result) {
+    function renderLedger(result, phaseLabels = {}) {
       const phase1 = result.ledger.filter(e => e.phase === 1);
       const phase2 = result.ledger.filter(e => e.phase === 2);
       const mortgageStd = phase1[0] ? phase1[0].mortgagePaymentStd : 0;
@@ -395,9 +395,12 @@
         </tr>`;
       }).join("");
 
+      const p1Label = phaseLabels.p1 || "Phase 1 \u2014 Buying houses";
+      const p2Label = phaseLabels.p2 || "Phase 2 \u2014 Paying off mortgages";
+
       return `
         <div class="ledger-section">
-          <h3 class="ledger-heading">Phase 1 — Buying houses</h3>
+          <h3 class="ledger-heading">${p1Label}</h3>
           <p class="ledger-formula-key">
             Standard mortgage payment: ${formatDollars(mortgageStd)}/mo per house owned.
             Net = income - obligations, added to fund each month.
@@ -422,7 +425,7 @@
         </div>
 
         <div class="ledger-section">
-          <h3 class="ledger-heading">Phase 2 — Paying off mortgages</h3>
+          <h3 class="ledger-heading">${p2Label}</h3>
           <p class="ledger-formula-key">
             All members pay C2. Surplus above required payments goes to the highest remaining balance (shown in green).
             Each mortgage line shows balance before and after, with interest and principal paid as a sub-line.
@@ -446,102 +449,139 @@
       `;
     }
 
-    // ── Comparison rendering ──────────────────────────────────────────────────
+    // ── Hybrid ledger rendering ───────────────────────────────────────────────
+    // Renders Phase A (sequential payoff section) via renderSequentialLedger,
+    // then Phase B (parallel mortgage section) via renderLedger with relabelled headings.
 
-    function renderComparison(parallel, sequential, inputs) {
+    function renderHybridLedger(result) {
+      const seqEntries = result.ledger.filter(e => e.phase === 'saving' || e.phase === 'payoff');
+      const parEntries = result.ledger.filter(e => e.phase === 1 || e.phase === 2);
+      const K = result.sequentialCount;
+      const N = result.positions.length;
+
+      const seqHtml = seqEntries.length > 0
+        ? `<h3 class="ledger-heading" style="margin-top:1.5rem">Phase A \u2014 Sequential payoff (first ${K} home${K > 1 ? "s" : ""})</h3>` +
+          renderSequentialLedger({ ...result, ledger: seqEntries })
+        : "";
+
+      const parHtml = parEntries.length > 0
+        ? renderLedger({ ...result, ledger: parEntries }, {
+            p1: `Phase B1 \u2014 Buying remaining ${N - K} home${N - K > 1 ? "s" : ""} (parallel)`,
+            p2: "Phase B2 \u2014 Paying off remaining mortgages",
+          })
+        : "";
+
+      return seqHtml + parHtml;
+    }
+
+    // ── Comparison rendering ──────────────────────────────────────────────────
+    // models: array of N+1 results from calculateGroup(inputs, 0..N)
+    // sequential: result from calculateGroupSequential(inputs)
+
+    function renderComparison(models, sequential, inputs) {
       const el         = document.getElementById("calc-results");
       const ledgerArea = document.getElementById("ledger-area");
       const N          = inputs.groupSize;
 
-      const diffClass = (a, b) => a < b ? "cmp-better" : a > b ? "cmp-worse" : "";
+      // Build labelled model list; sequential is appended last.
+      const allModels = [
+        ...models.map((r, k) => ({
+          key:    k === 0 ? "parallel" : `hybrid-${k}`,
+          label:  k === 0 ? "Parallel" : k === N ? `All seq.` : `Seq. ${k}`,
+          result: r,
+          type:   k === 0 ? "parallel" : "hybrid",
+        })),
+        { key: "sequential", label: "Sequential", result: sequential, type: "sequential" },
+      ].filter(m => !m.result.error);
 
-      // Per-position rows: housed timing + total paid, both models side by side.
-      const posRows = parallel.positions.map((pp, i) => {
-        const ps = sequential.positions[i];
-        return `<tr>
-          <td class="tbl-pos">Position ${pp.position}</td>
-          <td class="${diffClass(pp.monthsUntilHoused, ps.monthsUntilHoused)}">${formatMonths(pp.monthsUntilHoused)}</td>
-          <td class="${diffClass(ps.monthsUntilHoused, pp.monthsUntilHoused)}">${formatMonths(ps.monthsUntilHoused)}</td>
-          <td class="${diffClass(pp.totalPaid, ps.totalPaid)}">${formatDollars(pp.totalPaid)}</td>
-          <td class="${diffClass(ps.totalPaid, pp.totalPaid)}">${formatDollars(ps.totalPaid)}</td>
-        </tr>`;
-      }).join("");
+      // Color best/worst within each row.
+      function tableRows(getValue, fmt) {
+        return Array.from({ length: N }, (_, i) => {
+          const vals = allModels.map(m => getValue(m.result, i));
+          const min  = Math.min(...vals);
+          const max  = Math.max(...vals);
+          const cells = vals.map(v => {
+            const cls = v === min ? "cmp-better" : v === max ? "cmp-worse" : "";
+            return `<td class="${cls}">${fmt(v)}</td>`;
+          }).join("");
+          return `<tr><td class="tbl-pos">Position ${i + 1}</td>${cells}</tr>`;
+        }).join("");
+      }
 
-      const tradRow = `<tr class="tbl-trad">
-        <td class="tbl-pos">Traditional path</td>
-        <td colspan="2" style="text-align:center">${formatMonths(parallel.traditional.monthsToSaveDown)} to save + ${inputs.termYears} yr mortgage</td>
-        <td colspan="2" style="text-align:center">${formatDollars(parallel.traditional.totalPaid)}</td>
-      </tr>`;
+      const headerCells = allModels.map(m => `<th>${m.label}</th>`).join("");
+
+      const totalVals = allModels.map(m => m.result.totalMonths);
+      const totalMin  = Math.min(...totalVals);
+      const totalMax  = Math.max(...totalVals);
+      const totalRow  = `<tr class="tbl-total"><td class="tbl-pos"><em>Group total</em></td>${
+        totalVals.map(v => {
+          const cls = v === totalMin ? "cmp-better" : v === totalMax ? "cmp-worse" : "";
+          return `<td class="${cls}">${formatMonths(v)}</td>`;
+        }).join("")
+      }</tr>`;
+
+      const trad = models[0].traditional;
+      const tradRow = `<tr class="tbl-trad"><td class="tbl-pos">Traditional</td>
+        <td colspan="${allModels.length}" style="text-align:center;font-style:italic">
+          ${formatMonths(trad.monthsToSaveDown)} to save + ${inputs.termYears} yr mortgage = ${formatDollars(trad.totalPaid)}
+        </td></tr>`;
 
       el.innerHTML = `
-        <div class="calc-summary">
-          <div class="calc-summary__item">
-            <div class="calc-summary__value">${formatMonths(parallel.totalMonths)}</div>
-            <div class="calc-summary__label">parallel model — total lifetime</div>
-          </div>
-          <div class="calc-summary__item">
-            <div class="calc-summary__value">${formatMonths(sequential.totalMonths)}</div>
-            <div class="calc-summary__label">sequential model — total lifetime</div>
-          </div>
-        </div>
-
         <p class="calc-note" style="margin-bottom:1rem">
-          <span class="cmp-better-key">Green</span> = better outcome for that metric.
-          <span class="cmp-worse-key">Red</span> = worse.
-          The two models make different trade-offs — neither is strictly better for everyone.
+          <span class="cmp-better-key">Green</span> = best in row.
+          <span class="cmp-worse-key">Red</span> = worst.
+          "Seq. K" means the first K mortgages are paid off completely before switching to parallel for the rest.
         </p>
 
+        <h3 class="ledger-heading" style="margin-bottom:0.5rem">Months until housed</h3>
         <div class="tbl-wrapper">
           <table class="results-table">
-            <thead>
-              <tr>
-                <th rowspan="2">Member</th>
-                <th colspan="2">Months until housed</th>
-                <th colspan="2">Total paid (lifetime)</th>
-              </tr>
-              <tr>
-                <th class="cmp-col-a">Parallel</th>
-                <th class="cmp-col-b">Sequential</th>
-                <th class="cmp-col-a">Parallel</th>
-                <th class="cmp-col-b">Sequential</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${posRows}
-              ${tradRow}
-            </tbody>
+            <thead><tr><th>Member</th>${headerCells}</tr></thead>
+            <tbody>${tableRows((r, i) => r.positions[i].monthsUntilHoused, formatMonths)}${totalRow}</tbody>
           </table>
         </div>
 
-        <p class="calc-note">
-          <strong>Parallel model:</strong> fund buys a new house as soon as it accumulates the down payment, while simultaneously servicing all outstanding mortgages. Members get housed faster but the group carries multiple mortgages at once.<br><br>
-          <strong>Sequential model:</strong> each mortgage is paid off completely before saving for the next house. No mortgage debt is ever held simultaneously. Later members wait longer but the group's total interest burden is lower.
+        <h3 class="ledger-heading" style="margin-top:1.5rem;margin-bottom:0.5rem">Total paid (lifetime)</h3>
+        <div class="tbl-wrapper">
+          <table class="results-table">
+            <thead><tr><th>Member</th>${headerCells}</tr></thead>
+            <tbody>${tableRows((r, i) => r.positions[i].totalPaid, formatDollars)}${tradRow}</tbody>
+          </table>
+        </div>
+
+        <p class="calc-note" style="margin-top:1rem">
+          <strong>Parallel:</strong> buy each home as soon as the down payment is saved; service all mortgages simultaneously.<br>
+          <strong>Sequential:</strong> pay each mortgage off completely before saving for the next home.<br>
+          <strong>Seq. K:</strong> pay off the first K mortgages one at a time, then switch to parallel for the rest.
         </p>
       `;
 
+      // Ledger buttons + containers in the full-width area below.
       ledgerArea.innerHTML = `
         <div class="ledger-buttons">
-          <button class="btn btn--outline ledger-toggle" id="ledger-toggle-parallel" type="button">Show parallel model ledger</button>
-          <button class="btn btn--outline ledger-toggle" id="ledger-toggle-sequential" type="button">Show sequential model ledger</button>
+          ${allModels.map(m =>
+            `<button class="btn btn--outline ledger-toggle" id="ledger-toggle-${m.key}" type="button">Show ${m.label.toLowerCase()} ledger</button>`
+          ).join("")}
         </div>
-        <div id="ledger-parallel" hidden></div>
-        <div id="ledger-sequential" hidden></div>
+        ${allModels.map(m => `<div id="ledger-${m.key}" hidden></div>`).join("")}
       `;
 
-      document.getElementById("ledger-toggle-parallel").addEventListener("click", function () {
-        const container = document.getElementById("ledger-parallel");
-        if (!container.hidden) { container.hidden = true; this.textContent = "Show parallel model ledger"; return; }
-        container.hidden = false;
-        this.textContent = "Hide parallel model ledger";
-        if (!container.dataset.rendered) { container.innerHTML = renderLedger(parallel); container.dataset.rendered = "1"; }
-      });
-
-      document.getElementById("ledger-toggle-sequential").addEventListener("click", function () {
-        const container = document.getElementById("ledger-sequential");
-        if (!container.hidden) { container.hidden = true; this.textContent = "Show sequential model ledger"; return; }
-        container.hidden = false;
-        this.textContent = "Hide sequential model ledger";
-        if (!container.dataset.rendered) { container.innerHTML = renderSequentialLedger(sequential); container.dataset.rendered = "1"; }
+      allModels.forEach(m => {
+        const btn       = document.getElementById(`ledger-toggle-${m.key}`);
+        const container = document.getElementById(`ledger-${m.key}`);
+        const showLabel = `Show ${m.label.toLowerCase()} ledger`;
+        const hideLabel = `Hide ${m.label.toLowerCase()} ledger`;
+        btn.addEventListener("click", function () {
+          if (!container.hidden) { container.hidden = true; this.textContent = showLabel; return; }
+          container.hidden = false;
+          this.textContent = hideLabel;
+          if (!container.dataset.rendered) {
+            if (m.type === "parallel")   container.innerHTML = renderLedger(m.result);
+            else if (m.type === "sequential") container.innerHTML = renderSequentialLedger(m.result);
+            else                         container.innerHTML = renderHybridLedger(m.result);
+            container.dataset.rendered = "1";
+          }
+        });
       });
     }
 
@@ -645,15 +685,21 @@
         return;
       }
 
-      const parallel   = calculateGroup(inputs);
+      // Run calculateGroup for K = 0 (parallel) through K = N (sequential equivalent),
+      // plus the dedicated sequential model for comparison.
+      const models = [];
+      for (let k = 0; k <= inputs.groupSize; k++) {
+        models.push(calculateGroup(inputs, k));
+      }
       const sequential = calculateGroupSequential(inputs);
 
-      if (parallel.error || sequential.error) {
-        renderError((parallel.error || sequential.error) + " Consider increasing contributions or reducing the home price.");
+      const firstError = models.find(m => m.error);
+      if (firstError || sequential.error) {
+        renderError((firstError?.error || sequential.error) + " Consider increasing contributions or reducing the home price.");
         return;
       }
 
-      renderComparison(parallel, sequential, inputs);
+      renderComparison(models, sequential, inputs);
     });
   </script>
 
