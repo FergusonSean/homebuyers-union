@@ -167,6 +167,8 @@
           <p class="calc-results__placeholder">Fill in the inputs and press Calculate to see results.</p>
         </div>
       </div>
+
+      <div id="ledger-area"></div>
     </div>
   </section>
 
@@ -447,8 +449,9 @@
     // ── Comparison rendering ──────────────────────────────────────────────────
 
     function renderComparison(parallel, sequential, inputs) {
-      const el = document.getElementById("calc-results");
-      const N  = inputs.groupSize;
+      const el         = document.getElementById("calc-results");
+      const ledgerArea = document.getElementById("ledger-area");
+      const N          = inputs.groupSize;
 
       const diffClass = (a, b) => a < b ? "cmp-better" : a > b ? "cmp-worse" : "";
 
@@ -514,7 +517,9 @@
           <strong>Parallel model:</strong> fund buys a new house as soon as it accumulates the down payment, while simultaneously servicing all outstanding mortgages. Members get housed faster but the group carries multiple mortgages at once.<br><br>
           <strong>Sequential model:</strong> each mortgage is paid off completely before saving for the next house. No mortgage debt is ever held simultaneously. Later members wait longer but the group's total interest burden is lower.
         </p>
+      `;
 
+      ledgerArea.innerHTML = `
         <div class="ledger-buttons">
           <button class="btn btn--outline ledger-toggle" id="ledger-toggle-parallel" type="button">Show parallel model ledger</button>
           <button class="btn btn--outline ledger-toggle" id="ledger-toggle-sequential" type="button">Show sequential model ledger</button>
