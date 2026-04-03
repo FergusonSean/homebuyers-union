@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Homebuyers Union — Own Your Home, Together</title>
+  <meta name="description" content="A union of homebuyers pooling resources to buy houses for each member — faster and cheaper than a mortgage alone.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ── Navigation ─────────────────────────────────────────────────── -->
+  <header class="nav">
+    <div class="nav__inner">
+      <span class="nav__wordmark">The Homebuyers Union</span>
+      <a href="donors.html" class="nav__link">For Donors</a>
+    </div>
+  </header>
+
+  <!-- ── Hero ───────────────────────────────────────────────────────── -->
+  <section class="hero">
+    <div class="hero__inner">
+      <h1 class="hero__headline">Own your home.<br>Together.</h1>
+      <p class="hero__subhead">A union of homebuyers pooling resources to buy houses for each member — faster and cheaper than a mortgage alone.</p>
+      <a href="#waitlist" class="btn btn--primary">Join the waitlist</a>
+    </div>
+  </section>
+
+  <!-- ── The Problem ────────────────────────────────────────────────── -->
+  <section class="section reveal" id="problem">
+    <div class="container">
+      <h2 class="section__headline">What a mortgage actually costs you</h2>
+      <p class="section__lead">The sticker price on a house is a fiction. Here's what you're really paying.</p>
+      <div class="problem-grid">
+        <div class="problem-card">
+          <div class="problem-card__figure">10+ years</div>
+          <div class="problem-card__label">just to save the down payment</div>
+          <p class="problem-card__detail">Median US home is around $420,000. A 20% down payment is $84,000. Saving 10% of an $80,000 income — $8,000 a year — means over a decade before you can even apply for a mortgage. And that's if nothing goes wrong.</p>
+        </div>
+        <div class="problem-card">
+          <div class="problem-card__figure">$470,000</div>
+          <div class="problem-card__label">in interest on a $336,000 loan</div>
+          <p class="problem-card__detail">A 30-year mortgage at 7% on a $336,000 loan costs $2,235 a month. Over 30 years that's $804,000 in payments on $336,000 borrowed. The bank takes $470,000 from you and gives you nothing in return.</p>
+        </div>
+        <div class="problem-card">
+          <div class="problem-card__figure">$840,000+</div>
+          <div class="problem-card__label">total cost of a $420,000 home</div>
+          <p class="problem-card__detail">Down payment plus interest: you'll pay twice the purchase price before you own anything free and clear. A $420,000 house costs you north of $840,000. Banks have structured the system this way on purpose.</p>
+        </div>
+      </div>
+      <p class="section__callout">There is another way. People have been doing it for centuries.</p>
+    </div>
+  </section>
+
+  <!-- ── How It Works ───────────────────────────────────────────────── -->
+  <section class="section section--alt reveal" id="how-it-works">
+    <div class="container">
+      <h2 class="section__headline">How it works</h2>
+      <p class="section__lead">Six steps. Everyone ends up owning their home. The bank profits almost nothing.</p>
+      <ol class="steps">
+        <li class="steps__item">
+          <div class="steps__marker">1</div>
+          <div class="steps__content">
+            <strong>The group forms, everyone contributes.</strong>
+            A cohort of members signs up and commits to a small monthly payment. This goes into a shared fund. Nobody has a house yet, so everyone's contribution is modest — roughly what you're already spending on utilities or a car payment.
+          </div>
+        </li>
+        <li class="steps__item">
+          <div class="steps__marker">2</div>
+          <div class="steps__content">
+            <strong>The fund hits the down payment target.</strong>
+            Once the accumulated fund reaches the down payment threshold — typically 20% of the home price — the union buys the first house. The organization holds the title and takes on the mortgage. The first member moves in.
+          </div>
+        </li>
+        <li class="steps__item">
+          <div class="steps__marker">3</div>
+          <div class="steps__content">
+            <strong>The first member's contribution increases.</strong>
+            They've moved in and no longer pay rent. Their monthly contribution goes up to reflect their new situation — still less than a solo mortgage payment. That higher contribution, combined with everyone else's, accelerates buying the next house.
+          </div>
+        </li>
+        <li class="steps__item">
+          <div class="steps__marker">4</div>
+          <div class="steps__content">
+            <strong>Each subsequent house is bought faster.</strong>
+            Every time a member moves in, they start contributing more. The fund income grows. The interval between purchases shrinks with each cycle. The group builds momentum.
+          </div>
+        </li>
+        <li class="steps__item">
+          <div class="steps__marker">5</div>
+          <div class="steps__content">
+            <strong>All members are housed.</strong>
+            Everyone is in a home. The union now holds the mortgages on all of them. Members continue contributing at the post-house rate — the money now goes entirely to paying off the mortgages ahead of schedule.
+          </div>
+        </li>
+        <li class="steps__item">
+          <div class="steps__marker">6</div>
+          <div class="steps__content">
+            <strong>The mortgages clear. The houses are gifted. The union dissolves.</strong>
+            Once every mortgage is paid off, the union transfers full title to each member. The organization has served its purpose. It disbands.
+          </div>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ── Calculator ─────────────────────────────────────────────────── -->
+  <section class="section reveal" id="calculator">
+    <div class="container">
+      <h2 class="section__headline">Run the numbers for your group</h2>
+      <p class="section__lead">Adjust any input to see how the model plays out for each position in the group.</p>
+
+      <div class="calc-layout">
+        <form class="calc-form" id="calc-form" novalidate>
+
+          <fieldset class="calc-fieldset">
+            <legend class="calc-legend">Housing</legend>
+            <div class="calc-field">
+              <label class="calc-label" for="homePrice">Home price ($)</label>
+              <input class="calc-input" type="number" id="homePrice" name="homePrice" min="50000" max="5000000" step="1000" value="420000">
+            </div>
+            <div class="calc-field">
+              <label class="calc-label" for="downPaymentPct">Down payment (%)</label>
+              <input class="calc-input" type="number" id="downPaymentPct" name="downPaymentPct" min="3" max="50" step="1" value="20">
+            </div>
+            <div class="calc-field">
+              <label class="calc-label" for="annualRatePct">Mortgage interest rate (%)</label>
+              <input class="calc-input" type="number" id="annualRatePct" name="annualRatePct" min="1" max="20" step="0.1" value="7">
+            </div>
+            <div class="calc-field">
+              <label class="calc-label" for="termYears">Mortgage term (years)</label>
+              <input class="calc-input" type="number" id="termYears" name="termYears" min="10" max="40" step="1" value="30">
+            </div>
+          </fieldset>
+
+          <fieldset class="calc-fieldset">
+            <legend class="calc-legend">Group</legend>
+            <div class="calc-field">
+              <label class="calc-label" for="groupSize">Group size</label>
+              <input class="calc-input" type="number" id="groupSize" name="groupSize" min="2" max="20" step="1" value="6">
+            </div>
+            <div class="calc-field">
+              <label class="calc-label" for="c1">Pre-house monthly contribution ($)</label>
+              <input class="calc-input" type="number" id="c1" name="c1" min="100" max="10000" step="50" value="667">
+            </div>
+            <div class="calc-field">
+              <label class="calc-label" for="c2">Post-house monthly contribution ($)</label>
+              <input class="calc-input" type="number" id="c2" name="c2" min="100" max="10000" step="50" value="2400">
+            </div>
+            <div class="calc-field">
+              <label class="calc-label" for="monthlyDonorContrib">Monthly donor contribution ($)</label>
+              <input class="calc-input" type="number" id="monthlyDonorContrib" name="monthlyDonorContrib" min="0" max="100000" step="50" value="0">
+            </div>
+          </fieldset>
+
+          <button class="btn btn--primary calc-submit" type="submit">Calculate</button>
+        </form>
+
+        <div class="calc-results" id="calc-results" aria-live="polite">
+          <p class="calc-results__placeholder">Fill in the inputs and press Calculate to see results.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Who It's For ───────────────────────────────────────────────── -->
+  <section class="section section--alt reveal" id="who">
+    <div class="container">
+      <h2 class="section__headline">Who this is for</h2>
+      <div class="two-col">
+        <div>
+          <p>This model is for renters. People who are doing everything right — working, saving, staying stable — and still watching homeownership recede into the distance because the down payment alone takes a decade to accumulate.</p>
+          <p>It's for communities that understand collective finance because they've practiced it their whole lives. The tanda in Mexico and across Latin America. The susu across West Africa and the Caribbean. The hui in China and Vietnam. The chit fund in India. These are not fringe arrangements — they are centuries-old, widely trusted mechanisms for pooling resources and delivering outcomes that individuals can't reach alone.</p>
+          <p>The Homebuyers Union applies that proven logic to the American housing market. We're not inventing anything. We're applying something that already works to a problem that desperately needs it.</p>
+        </div>
+        <div>
+          <p>This is also for people who want collective power over individual debt. The mortgage system is built to extract as much interest as possible from as many individuals as possible, each isolated, each negotiating alone. A union changes that dynamic. You are not one borrower — you are part of a group that the fund serves.</p>
+          <p>You don't need perfect credit to join a waitlist. You don't need a large down payment saved. You need a steady income and the ability to commit to a monthly contribution for a long time. That's the contract.</p>
+          <p>If you've ever wondered whether there's a different way to do this — not an investment, not a gimmick, just people helping people buy homes — this is it.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Why It Works ───────────────────────────────────────────────── -->
+  <section class="section reveal" id="why">
+    <div class="container">
+      <h2 class="section__headline">What happens if something goes wrong?</h2>
+      <p class="section__lead">The union is designed to be resilient. Three scenarios have clear, defined outcomes.</p>
+      <div class="why-grid">
+        <div class="why-card">
+          <div class="why-card__title">Member stops paying before move-in</div>
+          <p>The principal they contributed is refunded. The interest they would have earned — the time-value of their money held by the fund — is retained by the union as a penalty. This protects the group's timeline from being undermined by pre-move-in exits.</p>
+        </div>
+        <div class="why-card">
+          <div class="why-card__title">Member stops paying after move-in</div>
+          <p>The house is sold. Proceeds return to the fund. The union has a contractual obligation to maintain the mortgage, and a non-paying member in an organization-owned home cannot be allowed to drag the group down. This is handled directly and clearly.</p>
+        </div>
+        <div class="why-card">
+          <div class="why-card__title">Member chooses to move voluntarily</div>
+          <p>The house is sold. Proceeds go to the departing member to help fund their next housing. The union loses a member but is made whole — the mortgage is cleared and the group's financial obligations are reduced.</p>
+        </div>
+      </div>
+      <div class="why-note">
+        <strong>What about home prices changing?</strong> The fund targets a percentage of the current home price at the time of purchase, not a fixed dollar amount. If prices rise, the down payment target rises with them and the group may take longer. That's a real risk — and it's still far better than waiting alone.
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Waitlist ────────────────────────────────────────────────────── -->
+  <section class="section section--red reveal" id="waitlist">
+    <div class="container container--narrow">
+      <h2 class="section__headline section__headline--light">Get on the waitlist</h2>
+      <p class="section__lead section__lead--light">We're building the first cohorts now. Tell us where you are and we'll be in touch when a group forms near you.</p>
+
+      <form class="waitlist-form" id="waitlist-form" action="https://formspree.io/f/placeholder" method="POST">
+        <div class="waitlist-field">
+          <label class="waitlist-label" for="wl-name">Your name</label>
+          <input class="waitlist-input" type="text" id="wl-name" name="name" autocomplete="name" required placeholder="First and last name">
+        </div>
+        <div class="waitlist-field">
+          <label class="waitlist-label" for="wl-email">Email address</label>
+          <input class="waitlist-input" type="email" id="wl-email" name="email" autocomplete="email" required placeholder="you@example.com">
+        </div>
+        <div class="waitlist-field">
+          <label class="waitlist-label" for="wl-city">City</label>
+          <input class="waitlist-input" type="text" id="wl-city" name="city" autocomplete="address-level2" required placeholder="City, state">
+        </div>
+        <button class="btn btn--white" type="submit">Join the waitlist</button>
+      </form>
+
+      <p class="waitlist-success" id="waitlist-success" hidden>
+        You're on the list. We'll be in touch.
+      </p>
+    </div>
+  </section>
+
+  <!-- ── Footer ─────────────────────────────────────────────────────── -->
+  <footer class="footer">
+    <div class="container">
+      <p class="footer__disclaimer">This is not financial advice. The Homebuyers Union is a charitable organization. Consult a licensed financial advisor before making housing decisions.</p>
+      <p class="footer__contact"><a href="mailto:contact@homebuyersunion.org">contact@homebuyersunion.org</a></p>
+    </div>
+  </footer>
+
+  <!-- ── Scripts ────────────────────────────────────────────────────── -->
+  <script src="calculator.js"></script>
+  <script>
+    // ── Scroll-reveal via Intersection Observer ──────────────────────
+    const revealObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("revealed");
+            revealObserver.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.1 }
+    );
+
+    document.querySelectorAll(".reveal").forEach((el) => {
+      revealObserver.observe(el);
+    });
+
+    // ── Waitlist form ────────────────────────────────────────────────
+    document.getElementById("waitlist-form").addEventListener("submit", function (e) {
+      e.preventDefault();
+      const form = this;
+      const successMsg = document.getElementById("waitlist-success");
+
+      fetch(form.action, {
+        method: "POST",
+        body: new FormData(form),
+        headers: { Accept: "application/json" },
+      }).then(() => {
+        form.hidden = true;
+        successMsg.hidden = false;
+      }).catch(() => {
+        form.hidden = true;
+        successMsg.hidden = false;
+      });
+    });
+
+    // ── Calculator DOM wiring ────────────────────────────────────────
+    function formatDollars(n) {
+      return "$" + Math.abs(n).toLocaleString("en-US");
+    }
+
+    function formatMonths(m) {
+      const years = Math.floor(m / 12);
+      const months = m % 12;
+      if (years === 0) return months + " mo";
+      if (months === 0) return years + " yr";
+      return years + " yr " + months + " mo";
+    }
+
+    function renderError(message) {
+      const el = document.getElementById("calc-results");
+      el.innerHTML = '<p class="calc-error">' + message + "</p>";
+    }
+
+    function renderResults(result) {
+      const el = document.getElementById("calc-results");
+
+      const savingsNote = (saved) => {
+        if (saved > 0) return '<span class="savings positive">saves ' + formatDollars(saved) + '</span>';
+        return '<span class="savings negative">costs ' + formatDollars(-saved) + ' more</span>';
+      };
+
+      let rows = result.positions.map((p) => {
+        return `
+          <tr>
+            <td class="tbl-pos">Position ${p.position}</td>
+            <td>${formatMonths(p.monthsUntilHoused)}</td>
+            <td>${formatDollars(p.totalPaid)}</td>
+            <td>${savingsNote(p.savedVsTraditional)}</td>
+          </tr>`;
+      }).join("");
+
+      const tradRow = `
+        <tr class="tbl-trad">
+          <td class="tbl-pos">Traditional path</td>
+          <td>${formatMonths(result.traditional.monthsToSaveDown)} to save, then 30 yr mortgage</td>
+          <td>${formatDollars(result.traditional.totalPaid)}</td>
+          <td>—</td>
+        </tr>`;
+
+      el.innerHTML = `
+        <div class="calc-summary">
+          <div class="calc-summary__item">
+            <div class="calc-summary__value">${formatMonths(result.totalMonths)}</div>
+            <div class="calc-summary__label">until org dissolves</div>
+          </div>
+          <div class="calc-summary__item">
+            <div class="calc-summary__value">${formatDollars(result.traditional.totalPaid)}</div>
+            <div class="calc-summary__label">traditional path total cost</div>
+          </div>
+        </div>
+        <div class="tbl-wrapper">
+          <table class="results-table">
+            <thead>
+              <tr>
+                <th>Member</th>
+                <th>Time until housed</th>
+                <th>Total paid</th>
+                <th>vs. traditional path</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+              ${tradRow}
+            </tbody>
+          </table>
+        </div>
+        <p class="calc-note">Position 1 is housed first and pays more total because they carry more of the group's mortgage burden. Later positions pay less. The union is a collective arrangement — early members subsidize later ones, knowingly.</p>
+      `;
+    }
+
+    document.getElementById("calc-form").addEventListener("submit", function (e) {
+      e.preventDefault();
+
+      const inputs = {
+        homePrice: parseFloat(document.getElementById("homePrice").value),
+        groupSize: parseInt(document.getElementById("groupSize").value),
+        c1: parseFloat(document.getElementById("c1").value),
+        c2: parseFloat(document.getElementById("c2").value),
+        downPaymentPct: parseFloat(document.getElementById("downPaymentPct").value) / 100,
+        annualRatePct: parseFloat(document.getElementById("annualRatePct").value),
+        termYears: parseInt(document.getElementById("termYears").value),
+        monthlyDonorContrib: parseFloat(document.getElementById("monthlyDonorContrib").value) || 0,
+      };
+
+      // Basic sanity checks before running simulation.
+      if (inputs.c2 <= 0 || inputs.c1 <= 0) {
+        renderError("Contributions must be greater than zero.");
+        return;
+      }
+
+      const result = calculateGroup(inputs);
+
+      if (result.error) {
+        renderError(result.error + " Consider increasing contributions or reducing the home price.");
+        return;
+      }
+
+      renderResults(result);
+    });
+  </script>
+
+</body>
+</html>
