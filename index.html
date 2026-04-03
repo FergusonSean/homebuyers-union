@@ -322,14 +322,20 @@
     //   extraPrincipal       = surplus applied to the highest remaining balance
     //   balanceAfter         = balanceBefore − principalFromPayment − extraPrincipal
 
-    // Builds the full income formula string for a tooltip.
-    function incomeTooltip(e) {
-      return (e.postHouseMembers > 0 ? `${e.postHouseMembers}×${formatDollars(e.c2Income / e.postHouseMembers)} C2` : "") +
-        (e.postHouseMembers > 0 && e.preHouseMembers > 0 ? " + " : "") +
-        (e.preHouseMembers  > 0 ? `${e.preHouseMembers}×${formatDollars(e.c1Income / e.preHouseMembers)} C1` : "") +
-        (e.donorIncome      > 0 ? ` + ${formatDollars(e.donorIncome)} donor` : "") +
-        (e.fundInterestEarned > 0 ? ` + ${formatDollars(e.fundInterestEarned)} interest` : "") +
-        ` = ${formatDollars(e.totalIncome)}`;
+    // Builds an income formula string for display as a sub-line in a cell.
+    // Uses plain ASCII "x" instead of the multiplication symbol to avoid encoding issues.
+    // Builds an income breakdown string for display as a sub-line in a cell.
+    // Parallel ledger entries use postHouseMembers/preHouseMembers;
+    // sequential ledger entries use housedMembers/waitingMembers.
+    function incomeFormula(e) {
+      const parts = [];
+      const housed  = e.postHouseMembers ?? e.housedMembers  ?? 0;
+      const waiting = e.preHouseMembers  ?? e.waitingMembers ?? 0;
+      if (housed  > 0 && e.c2Income > 0) parts.push(`${housed}x${formatDollars(e.c2Income / housed)} C2`);
+      if (waiting > 0 && e.c1Income > 0) parts.push(`${waiting}x${formatDollars(e.c1Income / waiting)} C1`);
+      if (e.donorIncome        > 0) parts.push(`${formatDollars(e.donorIncome)} donor`);
+      if (e.fundInterestEarned > 0) parts.push(`${formatDollars(e.fundInterestEarned)} interest`);
+      return parts.join(" + ");
     }
 
     function renderLedger(result) {
@@ -338,51 +344,50 @@
       const mortgageStd = phase1[0] ? phase1[0].mortgagePaymentStd : 0;
 
       // ── Phase 1: 6 columns ───────────────────────────────────────────────
-      // Formulas live in title attributes so the table stays narrow.
-      // "Net → Balance" shows: net change, then resulting fund balance.
-      // On purchase months it also shows the down-payment withdrawal.
+      // Each income and obligations cell shows the total on top and the
+      // formula breakdown as a small sub-line below.
       const p1Rows = phase1.map(e => {
-        const obTip = e.activeMortgages > 0
-          ? `${e.activeMortgages}×${formatDollars(mortgageStd)} = ${formatDollars(e.totalObligations)}`
-          : "no mortgages yet";
+        const obFormula = e.activeMortgages > 0
+          ? `${e.activeMortgages} mortgage${e.activeMortgages > 1 ? "s" : ""} x ${formatDollars(mortgageStd)}`
+          : "none yet";
 
-        let balanceCell = `${e.netGrowth >= 0 ? "+" : "−"}${formatDollars(Math.abs(e.netGrowth))} → ${formatDollars(e.fundBalanceAfterGrowth)}`;
+        let balanceCell = `${e.netGrowth >= 0 ? "+" : "-"}${formatDollars(Math.abs(e.netGrowth))} &rarr; ${formatDollars(e.fundBalanceAfterGrowth)}`;
         let eventCell   = "";
         if (e.housePurchased) {
-          balanceCell += `<br><span class="ledger-purchase-detail">−${formatDollars(e.housePurchased.downPaymentWithdrawn)} → ${formatDollars(e.fundBalanceEnd)}</span>`;
+          balanceCell += `<span class="ledger-sub">-${formatDollars(e.housePurchased.downPaymentWithdrawn)} down payment &rarr; ${formatDollars(e.fundBalanceEnd)}</span>`;
           eventCell    = `<strong class="ledger-event">House ${e.housePurchased.position}</strong>`;
         }
 
         return `<tr${e.housePurchased ? ' class="ledger-purchase-row"' : ''}>
           <td class="ledger-month">${e.month}</td>
           <td class="ledger-housed">${e.postHouseMembers} in / ${e.preHouseMembers} waiting</td>
-          <td class="ledger-num ledger-tip" title="${incomeTooltip(e)}">${formatDollars(e.totalIncome)}</td>
-          <td class="ledger-num ledger-tip" title="${obTip}">${formatDollars(e.totalObligations)}</td>
+          <td class="ledger-num">${formatDollars(e.totalIncome)}<span class="ledger-sub">${incomeFormula(e)}</span></td>
+          <td class="ledger-num">${formatDollars(e.totalObligations)}<span class="ledger-sub">${obFormula}</span></td>
           <td class="ledger-balance">${balanceCell}</td>
           <td>${eventCell}</td>
         </tr>`;
       }).join("");
 
       // ── Phase 2: 5 columns ───────────────────────────────────────────────
-      // All mortgage detail is stacked into one cell — one line per mortgage.
-      // Hover each line to see the interest/principal breakdown.
+      // Mortgage details stack into one cell — one line per mortgage showing
+      // before/after balance with interest and principal as a sub-line.
       const p2Rows = phase2.map(e => {
-        const obTip = `${e.activeMortgages}×${formatDollars(mortgageStd)} = ${formatDollars(e.totalObligations)}`;
+        const obFormula = `${e.activeMortgages} x ${formatDollars(mortgageStd)}`;
 
         const mortgageLines = e.mortgageDetails.map(d => {
           if (d.balanceBefore === 0 && d.balanceAfter === 0) {
             return `<span class="ledger-paid-off">#${d.position} paid off</span>`;
           }
-          const tip = `interest ${formatDollars(d.interestCharged)} + principal ${formatDollars(d.principalFromPayment)}` +
-            (d.extraPrincipal > 0 ? ` + surplus ${formatDollars(d.extraPrincipal)}` : "");
-          const extra = d.extraPrincipal > 0 ? ` <span class="ledger-extra">+${formatDollars(d.extraPrincipal)}</span>` : "";
-          return `<span class="ledger-tip" title="${tip}">#${d.position}: ${formatDollars(d.balanceBefore)} → ${formatDollars(d.balanceAfter)}${extra}</span>`;
-        }).join("<br>");
+          const extra = d.extraPrincipal > 0
+            ? ` + <span class="ledger-extra">${formatDollars(d.extraPrincipal)} surplus</span>` : "";
+          const detail = `interest ${formatDollars(d.interestCharged)} + principal ${formatDollars(d.principalFromPayment)}${extra}`;
+          return `<span class="ledger-mortgage-line">#${d.position}: ${formatDollars(d.balanceBefore)} &rarr; ${formatDollars(d.balanceAfter)}<span class="ledger-sub">${detail}</span></span>`;
+        }).join("");
 
         return `<tr>
           <td class="ledger-month">${e.month}</td>
-          <td class="ledger-num ledger-tip" title="${incomeTooltip(e)}">${formatDollars(e.totalIncome)}</td>
-          <td class="ledger-num ledger-tip" title="${obTip}">${formatDollars(e.totalObligations)}</td>
+          <td class="ledger-num">${formatDollars(e.totalIncome)}<span class="ledger-sub">${incomeFormula(e)}</span></td>
+          <td class="ledger-num">${formatDollars(e.totalObligations)}<span class="ledger-sub">${obFormula}</span></td>
           <td class="ledger-pos">${formatDollars(e.surplus)}</td>
           <td class="ledger-mortgages">${mortgageLines}</td>
         </tr>`;
@@ -392,15 +397,22 @@
         <div class="ledger-section">
           <h3 class="ledger-heading">Phase 1 — Buying houses</h3>
           <p class="ledger-formula-key">
-            Mortgage payment: ${formatDollars(mortgageStd)}/mo per house.
-            Net = income − obligations; added to fund each month.
-            House purchased when fund ≥ down payment — withdrawal shown on highlighted rows.
-            <em>Hover income and obligations cells to see the full formula.</em>
+            Standard mortgage payment: ${formatDollars(mortgageStd)}/mo per house owned.
+            Net = income - obligations, added to fund each month.
+            Highlighted rows show a house purchase — down payment withdrawn from fund.
           </p>
           <div class="ledger-scroll">
             <table class="ledger-table">
+              <colgroup>
+                <col style="width:6%">
+                <col style="width:14%">
+                <col style="width:18%">
+                <col style="width:18%">
+                <col style="width:30%">
+                <col style="width:14%">
+              </colgroup>
               <thead><tr>
-                <th>Month</th><th>In / Waiting</th><th>Income</th><th>Obligations</th><th>Net → Balance</th><th>Event</th>
+                <th>Month</th><th>In / Waiting</th><th>Income</th><th>Obligations</th><th>Net &rarr; Balance</th><th>Event</th>
               </tr></thead>
               <tbody>${p1Rows}</tbody>
             </table>
@@ -410,11 +422,18 @@
         <div class="ledger-section">
           <h3 class="ledger-heading">Phase 2 — Paying off mortgages</h3>
           <p class="ledger-formula-key">
-            Surplus above required payments goes to the highest remaining balance (shown in green).
-            <em>Hover income/obligations for full formula. Hover any mortgage line for interest/principal detail.</em>
+            All members pay C2. Surplus above required payments goes to the highest remaining balance (shown in green).
+            Each mortgage line shows balance before and after, with interest and principal paid as a sub-line.
           </p>
           <div class="ledger-scroll">
             <table class="ledger-table">
+              <colgroup>
+                <col style="width:6%">
+                <col style="width:20%">
+                <col style="width:18%">
+                <col style="width:10%">
+                <col style="width:46%">
+              </colgroup>
               <thead><tr>
                 <th>Month</th><th>Income</th><th>Obligations</th><th>Surplus</th><th>Mortgage balances</th>
               </tr></thead>
@@ -546,25 +565,25 @@
             return `<tr${e.housePurchased ? ' class="ledger-purchase-row"' : ''}>
               <td class="ledger-month">${e.month}</td>
               <td class="ledger-phase">saving</td>
-              <td class="ledger-num ledger-tip" title="${incomeTooltip(e)}">${formatDollars(e.totalIncome)}</td>
+              <td class="ledger-num">${formatDollars(e.totalIncome)}<span class="ledger-sub">${incomeFormula(e)}</span></td>
               <td class="ledger-balance">${progress}</td>
               <td class="ledger-na">—</td>
               <td>${event}</td>
             </tr>`;
           } else {
-            const tip = `interest: ${formatDollars(e.interestCharged)} | principal: ${formatDollars(e.principalPaid)}` +
-              (e.overpayment > 0 ? ` | overpayment carried: ${formatDollars(e.overpayment)}` : "");
-            const mortgageCell = `${formatDollars(e.mortgageBalanceBefore)} → ${formatDollars(e.mortgageBalanceAfter)}`;
+            const mortgageDetail = `interest ${formatDollars(e.interestCharged)} + principal ${formatDollars(e.principalPaid)}` +
+              (e.overpayment > 0 ? ` + <span class="ledger-extra">${formatDollars(e.overpayment)} surplus</span>` : "");
+            const mortgageCell = `${formatDollars(e.mortgageBalanceBefore)} &rarr; ${formatDollars(e.mortgageBalanceAfter)}<span class="ledger-sub">${mortgageDetail}</span>`;
             const notes = e.mortgageBalanceAfter === 0
               ? `<strong class="ledger-event">Paid off</strong>` +
-                (e.overpayment > 0 ? ` <span class="ledger-extra">+${formatDollars(e.overpayment)} to next cycle</span>` : "")
+                (e.overpayment > 0 ? ` <span class="ledger-extra">+${formatDollars(e.overpayment)} to next</span>` : "")
               : "";
             return `<tr${e.mortgageBalanceAfter === 0 ? ' class="ledger-purchase-row"' : ''}>
               <td class="ledger-month">${e.month}</td>
               <td class="ledger-phase">payoff</td>
-              <td class="ledger-num ledger-tip" title="${incomeTooltip(e)}">${formatDollars(e.totalIncome)}</td>
+              <td class="ledger-num">${formatDollars(e.totalIncome)}<span class="ledger-sub">${incomeFormula(e)}</span></td>
               <td class="ledger-na">—</td>
-              <td class="ledger-balance ledger-tip" title="${tip}">${mortgageCell}</td>
+              <td class="ledger-balance">${mortgageCell}</td>
               <td>${notes}</td>
             </tr>`;
           }
@@ -574,6 +593,14 @@
           <h3 class="ledger-heading">House ${houseIdx} cycle</h3>
           <div class="ledger-scroll">
             <table class="ledger-table">
+              <colgroup>
+                <col style="width:6%">
+                <col style="width:10%">
+                <col style="width:20%">
+                <col style="width:22%">
+                <col style="width:28%">
+                <col style="width:14%">
+              </colgroup>
               <thead><tr>
                 <th>Month</th><th>Phase</th><th>Income</th><th>Fund balance</th><th>Mortgage balance</th><th>Notes</th>
               </tr></thead>
@@ -587,8 +614,7 @@
         <p class="ledger-formula-key">
           Down payment target: ${formatDollars(downPaymentTarget)}.
           Saving phase: fund grows until target reached, then house is purchased.
-          Payoff phase: all income goes directly to the mortgage (interest = balance × rate/12, remainder reduces principal).
-          <em>Hover income cells for full formula. Hover mortgage balance cells for interest/principal detail.</em>
+          Payoff phase: all income goes directly to the mortgage (interest = balance &times; rate/12, remainder reduces principal).
         </p>
         ${sections}
       `;

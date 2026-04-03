@@ -957,8 +957,8 @@ a.nav__wordmark:hover {
   border-collapse: collapse;
   font-size: 0.75rem;
   font-family: "Inter", sans-serif;
-  min-width: 100%;
-  white-space: nowrap;
+  width: 100%;
+  table-layout: fixed;
 }
 
 .ledger-table th {
@@ -975,6 +975,8 @@ a.nav__wordmark:hover {
   padding: 0.35rem 0.75rem;
   border-bottom: 1px solid #ece8e2;
   vertical-align: top;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .ledger-table tr:last-child td {
@@ -1002,7 +1004,19 @@ a.nav__wordmark:hover {
 
 .ledger-balance {
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+}
+
+.ledger-sub {
+  display: block;
+  font-size: 0.68rem;
+  color: #888;
+  line-height: 1.4;
+  font-weight: normal;
+}
+
+.ledger-mortgage-line {
+  display: block;
+  margin-bottom: 0.25rem;
 }
 
 .ledger-purchase-detail {
