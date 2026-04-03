@@ -1,6 +1,6 @@
 // calculator.js
 // Pure logic for the Homebuyers Union group simulation.
-// No DOM references. Exposes a single calculateGroup(inputs) function.
+// No DOM references. Exposes calculateGroup and calculateGroupSequential.
 
 "use strict";
 
@@ -144,12 +144,14 @@ function calculateGroup(inputs) {
     annualRatePct,
     termYears = 30,
     monthlyDonorContrib = 0,
+    fundYieldPct = 0,
   } = inputs;
 
   const downPaymentTarget = homePrice * downPaymentPct;
   const loanPrincipal = homePrice * (1 - downPaymentPct);
   const mortgagePaymentStd = monthlyMortgagePayment(loanPrincipal, annualRatePct, termYears);
-  const r = annualRatePct / 100 / 12;
+  const r      = annualRatePct / 100 / 12;
+  const fundR  = fundYieldPct  / 100 / 12;
 
   const MAX_MONTHS = 600;
 
@@ -168,14 +170,15 @@ function calculateGroup(inputs) {
       return { error: "Simulation exceeded 600 months. Try different inputs.", positions: null, totalMonths: null, traditional: null, ledger: null };
     }
 
-    const postHouseMembers = housedCount;
-    const preHouseMembers  = N - housedCount;
-    const c2Income         = postHouseMembers * c2;
-    const c1Income         = preHouseMembers  * c1;
-    const totalIncome      = c2Income + c1Income + monthlyDonorContrib;
-    const totalObligations = housedCount * mortgagePaymentStd;
-    const netGrowth        = totalIncome - totalObligations;
-    const fundBalanceStart = fundBalance;
+    const postHouseMembers  = housedCount;
+    const preHouseMembers   = N - housedCount;
+    const c2Income          = postHouseMembers * c2;
+    const c1Income          = preHouseMembers  * c1;
+    const fundInterestEarned = fundBalance * fundR;
+    const totalIncome        = c2Income + c1Income + monthlyDonorContrib + fundInterestEarned;
+    const totalObligations   = housedCount * mortgagePaymentStd;
+    const netGrowth          = totalIncome - totalObligations;
+    const fundBalanceStart   = fundBalance;
 
     // Accrue contributions.
     for (let k = 0; k < N; k++) {
@@ -207,6 +210,7 @@ function calculateGroup(inputs) {
       c2Income,
       c1Income,
       donorIncome: monthlyDonorContrib,
+      fundInterestEarned,
       totalIncome,
       activeMortgages: postHouseMembers,
       mortgagePaymentStd,
@@ -374,11 +378,13 @@ function calculateGroupSequential(inputs) {
     annualRatePct,
     termYears = 30,
     monthlyDonorContrib = 0,
+    fundYieldPct = 0,
   } = inputs;
 
   const downPaymentTarget = homePrice * downPaymentPct;
   const loanPrincipal     = homePrice * (1 - downPaymentPct);
   const r                 = annualRatePct / 100 / 12;
+  const fundR             = fundYieldPct  / 100 / 12;
   const MAX_MONTHS        = 600;
 
   const housedAtMonth = new Array(N).fill(null);
@@ -406,7 +412,8 @@ function calculateGroupSequential(inputs) {
       for (let i = 0; i < N; i++) {
         totalPaid[i] += i < k ? c2 : c1;
       }
-      fundBalance += savingIncome;
+      const fundInterestEarned = fundBalance * fundR;
+      fundBalance += savingIncome + fundInterestEarned;
       month++;
 
       ledger.push({
@@ -418,7 +425,8 @@ function calculateGroupSequential(inputs) {
         c2Income: savingC2,
         c1Income: savingC1,
         donorIncome: monthlyDonorContrib,
-        totalIncome: savingIncome,
+        fundInterestEarned,
+        totalIncome: savingIncome + fundInterestEarned,
         fundBalance,
         downPaymentTarget,
         housePurchased: fundBalance >= downPaymentTarget,

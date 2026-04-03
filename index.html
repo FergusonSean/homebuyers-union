@@ -154,6 +154,10 @@
               <label class="calc-label" for="monthlyDonorContrib">Monthly donor contribution ($)</label>
               <input class="calc-input" type="number" id="monthlyDonorContrib" name="monthlyDonorContrib" min="0" max="100000" step="50" value="0">
             </div>
+            <div class="calc-field">
+              <label class="calc-label" for="fundYieldPct">Fund savings yield (% annual)</label>
+              <input class="calc-input" type="number" id="fundYieldPct" name="fundYieldPct" min="0" max="10" step="0.1" value="0">
+            </div>
           </fieldset>
 
           <button class="btn btn--primary calc-submit" type="submit">Calculate</button>
@@ -329,6 +333,7 @@
           (e.postHouseMembers > 0 && e.preHouseMembers > 0 ? " + " : "") +
           (e.preHouseMembers  > 0 ? `${e.preHouseMembers}×${formatDollars(e.c1Income / e.preHouseMembers)} (C1)` : "") +
           (e.donorIncome > 0 ? ` + ${formatDollars(e.donorIncome)} (donor)` : "") +
+          (e.fundInterestEarned > 0 ? ` + ${formatDollars(e.fundInterestEarned)} (fund interest)` : "") +
           ` = ${formatDollars(e.totalIncome)}`;
 
         const obligationsFormula = e.activeMortgages > 0
@@ -577,6 +582,7 @@
               (e.housedMembers > 0 && e.waitingMembers > 0 ? " + " : "") +
               (e.waitingMembers > 0 ? `${e.waitingMembers}×${formatDollars(e.c1Income / e.waitingMembers)} (C1)` : "") +
               (e.donorIncome > 0 ? ` + ${formatDollars(e.donorIncome)} (donor)` : "") +
+              (e.fundInterestEarned > 0 ? ` + ${formatDollars(e.fundInterestEarned)} (fund interest)` : "") +
               ` = ${formatDollars(e.totalIncome)}`;
             const event = e.housePurchased
               ? `<strong class="ledger-event">House ${e.houseIndex} purchased — ${formatDollars(e.downPaymentTarget)} withdrawn</strong>`
@@ -654,6 +660,7 @@
         annualRatePct: parseFloat(document.getElementById("annualRatePct").value),
         termYears: parseInt(document.getElementById("termYears").value),
         monthlyDonorContrib: parseFloat(document.getElementById("monthlyDonorContrib").value) || 0,
+        fundYieldPct: parseFloat(document.getElementById("fundYieldPct").value) || 0,
       };
 
       if (inputs.c2 <= 0 || inputs.c1 <= 0) {
