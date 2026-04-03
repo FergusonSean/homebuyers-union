@@ -1046,3 +1046,26 @@ a.nav__wordmark:hover {
   color: #555;
   font-size: 0.72rem;
 }
+
+/* ── Model comparison ───────────────────────────────────────────────────────── */
+
+.cmp-col-a { background: rgba(26, 107, 26, 0.08); }
+.cmp-col-b { background: rgba(139, 26, 26, 0.06); }
+
+.cmp-better { color: #1a6b1a; font-weight: 600; }
+.cmp-worse  { color: #8B1A1A; font-weight: 600; }
+
+.cmp-better-key { color: #1a6b1a; font-weight: 600; }
+.cmp-worse-key  { color: #8B1A1A; font-weight: 600; }
+
+.ledger-buttons {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 1.5rem;
+}
+
+.ledger-na {
+  color: #aaa;
+  font-style: italic;
+}

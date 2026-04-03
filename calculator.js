@@ -325,11 +325,198 @@ function calculateGroup(inputs) {
   };
 }
 
+// ─── Sequential payoff simulation ────────────────────────────────────────────
+
+// Simulates the Homebuyers Union group under the sequential payoff model:
+// each mortgage is paid off in full before the fund begins saving for the
+// next house. One cycle per member: save → buy → pay off → repeat.
+//
+// All monthly income during the payoff phase goes directly to the active
+// mortgage (not split across multiple mortgages as in calculateGroup).
+// Any overpayment in the final month of payoff carries into the next
+// saving phase as a head start on the next down payment.
+//
+// Returns the same shape as calculateGroup:
+//   { positions, totalMonths, traditional, ledger, error }
+//
+// ── Ledger entry shape (sequential) ────────────────────────────────────────
+//   month         : 1-indexed month number
+//   phase         : 'saving' or 'payoff'
+//   houseIndex    : which house this cycle is for (1-indexed)
+//
+//   // Contributions collected this month (same regardless of phase)
+//   housedMembers  : members already in a fully-paid-off home (paying C2)
+//   waitingMembers : members not yet in a home (paying C1)
+//   c2Income       : housedMembers × C2  [during payoff: includes the new occupant]
+//   c1Income       : waitingMembers × C1
+//   donorIncome    : monthlyDonorContrib
+//   totalIncome    : c2Income + c1Income + donorIncome
+//
+//   // Saving-phase fields (null during payoff)
+//   fundBalance    : cumulative fund balance after this month's income
+//   downPaymentTarget : target the fund is saving toward
+//   housePurchased : true on the month the fund hits the target
+//
+//   // Payoff-phase fields (null during saving)
+//   mortgageBalanceBefore : balance at the start of this month
+//   interestCharged       : mortgageBalanceBefore × (annualRatePct / 100 / 12)
+//   principalPaid         : totalIncome − interestCharged (capped at remaining balance)
+//   mortgageBalanceAfter  : balance at the end of this month
+//   overpayment           : amount by which income exceeded what was owed (carried to next cycle)
+
+function calculateGroupSequential(inputs) {
+  const {
+    homePrice,
+    groupSize: N,
+    c1,
+    c2,
+    downPaymentPct,
+    annualRatePct,
+    termYears = 30,
+    monthlyDonorContrib = 0,
+  } = inputs;
+
+  const downPaymentTarget = homePrice * downPaymentPct;
+  const loanPrincipal     = homePrice * (1 - downPaymentPct);
+  const r                 = annualRatePct / 100 / 12;
+  const MAX_MONTHS        = 600;
+
+  const housedAtMonth = new Array(N).fill(null);
+  const totalPaid     = new Array(N).fill(0);
+  const ledger        = [];
+
+  let month     = 0;
+  let carryover = 0; // overpayment from previous payoff cycle
+
+  for (let k = 0; k < N; k++) {
+    // ── Saving phase ────────────────────────────────────────────────────
+    // k mortgages are now fully paid off.
+    // Members 0..k-1 are housed (C2). Members k..N-1 are waiting (C1).
+    const savingC2      = k * c2;
+    const savingC1      = (N - k) * c1;
+    const savingIncome  = savingC2 + savingC1 + monthlyDonorContrib;
+    let   fundBalance   = carryover;
+    carryover           = 0;
+
+    while (fundBalance < downPaymentTarget) {
+      if (month >= MAX_MONTHS) {
+        return { error: "Simulation exceeded 600 months. Try different inputs.", positions: null, totalMonths: null, traditional: null, ledger: null };
+      }
+
+      for (let i = 0; i < N; i++) {
+        totalPaid[i] += i < k ? c2 : c1;
+      }
+      fundBalance += savingIncome;
+      month++;
+
+      ledger.push({
+        month,
+        phase: 'saving',
+        houseIndex: k + 1,
+        housedMembers: k,
+        waitingMembers: N - k,
+        c2Income: savingC2,
+        c1Income: savingC1,
+        donorIncome: monthlyDonorContrib,
+        totalIncome: savingIncome,
+        fundBalance,
+        downPaymentTarget,
+        housePurchased: fundBalance >= downPaymentTarget,
+        mortgageBalanceBefore: null,
+        interestCharged: null,
+        principalPaid: null,
+        mortgageBalanceAfter: null,
+        overpayment: null,
+      });
+    }
+
+    // Buy house k+1: withdraw down payment, member k moves in.
+    fundBalance -= downPaymentTarget;
+    housedAtMonth[k] = month;
+
+    // ── Payoff phase ─────────────────────────────────────────────────────
+    // k+1 members now housed (C2). Members k+1..N-1 still waiting (C1).
+    // ALL monthly income goes toward paying off this mortgage.
+    const payoffC2     = (k + 1) * c2;
+    const payoffC1     = (N - k - 1) * c1;
+    const payoffIncome = payoffC2 + payoffC1 + monthlyDonorContrib;
+
+    // Any remaining fund balance from the saving overshoot is applied immediately.
+    let mortgageBalance = Math.max(0, loanPrincipal - fundBalance);
+
+    while (mortgageBalance > 0) {
+      if (month >= MAX_MONTHS) {
+        return { error: "Simulation exceeded 600 months. Try different inputs.", positions: null, totalMonths: null, traditional: null, ledger: null };
+      }
+
+      for (let i = 0; i < N; i++) {
+        totalPaid[i] += i <= k ? c2 : c1;
+      }
+
+      const balanceBefore    = mortgageBalance;
+      const interestCharged  = balanceBefore * r;
+      const totalOwed        = balanceBefore + interestCharged;
+      const payment          = Math.min(payoffIncome, totalOwed);
+      const principalPaid    = payment - interestCharged;
+      const overpayment      = Math.max(0, payoffIncome - totalOwed);
+
+      mortgageBalance = Math.max(0, balanceBefore - principalPaid);
+      month++;
+
+      ledger.push({
+        month,
+        phase: 'payoff',
+        houseIndex: k + 1,
+        housedMembers: k + 1,
+        waitingMembers: N - k - 1,
+        c2Income: payoffC2,
+        c1Income: payoffC1,
+        donorIncome: monthlyDonorContrib,
+        totalIncome: payoffIncome,
+        fundBalance: null,
+        downPaymentTarget: null,
+        housePurchased: null,
+        mortgageBalanceBefore: balanceBefore,
+        interestCharged,
+        principalPaid,
+        mortgageBalanceAfter: mortgageBalance,
+        overpayment,
+      });
+
+      if (overpayment > 0) {
+        carryover = overpayment;
+      }
+    }
+  }
+
+  const totalMonths = month;
+  const trad        = traditionalPath(homePrice, downPaymentPct, c1, annualRatePct, termYears);
+
+  const positions = housedAtMonth.map((housedMonth, k) => ({
+    position: k + 1,
+    monthsUntilHoused: housedMonth,
+    totalPaid: Math.round(totalPaid[k]),
+    savedVsTraditional: Math.round(trad.totalPaid - totalPaid[k]),
+  }));
+
+  return {
+    positions,
+    totalMonths,
+    traditional: {
+      monthsToSaveDown: trad.monthsToSaveDown,
+      totalPaid: Math.round(trad.totalPaid),
+    },
+    ledger,
+    error: null,
+  };
+}
+
 // ─── Export ───────────────────────────────────────────────────────────────────
 
 // Support both CommonJS (for tests) and browser global.
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { calculateGroup, monthlyMortgagePayment, traditionalPath };
+  module.exports = { calculateGroup, calculateGroupSequential, monthlyMortgagePayment, traditionalPath };
 } else {
-  window.calculateGroup = calculateGroup;
+  window.calculateGroup           = calculateGroup;
+  window.calculateGroupSequential = calculateGroupSequential;
 }

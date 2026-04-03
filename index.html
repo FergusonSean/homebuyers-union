@@ -303,79 +303,6 @@
       el.innerHTML = '<p class="calc-error">' + message + "</p>";
     }
 
-    function renderResults(result) {
-      const el = document.getElementById("calc-results");
-
-      const savingsNote = (saved) => {
-        if (saved > 0) return '<span class="savings positive">saves ' + formatDollars(saved) + '</span>';
-        return '<span class="savings negative">costs ' + formatDollars(-saved) + ' more</span>';
-      };
-
-      let rows = result.positions.map((p) => {
-        return `
-          <tr>
-            <td class="tbl-pos">Position ${p.position}</td>
-            <td>${formatMonths(p.monthsUntilHoused)}</td>
-            <td>${formatDollars(p.totalPaid)}</td>
-            <td>${savingsNote(p.savedVsTraditional)}</td>
-          </tr>`;
-      }).join("");
-
-      const tradRow = `
-        <tr class="tbl-trad">
-          <td class="tbl-pos">Traditional path</td>
-          <td>${formatMonths(result.traditional.monthsToSaveDown)} to save, then 30 yr mortgage</td>
-          <td>${formatDollars(result.traditional.totalPaid)}</td>
-          <td>—</td>
-        </tr>`;
-
-      el.innerHTML = `
-        <div class="calc-summary">
-          <div class="calc-summary__item">
-            <div class="calc-summary__value">${formatMonths(result.totalMonths)}</div>
-            <div class="calc-summary__label">until org dissolves</div>
-          </div>
-          <div class="calc-summary__item">
-            <div class="calc-summary__value">${formatDollars(result.traditional.totalPaid)}</div>
-            <div class="calc-summary__label">traditional path total cost</div>
-          </div>
-        </div>
-        <div class="tbl-wrapper">
-          <table class="results-table">
-            <thead>
-              <tr>
-                <th>Member</th>
-                <th>Time until housed</th>
-                <th>Total paid</th>
-                <th>vs. traditional path</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rows}
-              ${tradRow}
-            </tbody>
-          </table>
-        </div>
-        <p class="calc-note">Position 1 is housed first and pays more total because they carry more of the group's mortgage burden. Later positions pay less. The union is a collective arrangement — early members subsidize later ones, knowingly.</p>
-        <button class="btn btn--outline ledger-toggle" id="ledger-toggle" type="button">Show month-by-month ledger</button>
-        <div id="ledger-container" hidden></div>
-      `;
-
-      document.getElementById("ledger-toggle").addEventListener("click", function () {
-        const container = document.getElementById("ledger-container");
-        if (!container.hidden) {
-          container.hidden = true;
-          this.textContent = "Show month-by-month ledger";
-          return;
-        }
-        container.hidden = false;
-        this.textContent = "Hide ledger";
-        if (!container.dataset.rendered) {
-          container.innerHTML = renderLedger(result);
-          container.dataset.rendered = "1";
-        }
-      });
-    }
 
     // ── Ledger rendering ──────────────────────────────────────────────────────
     //
@@ -526,6 +453,195 @@
       `;
     }
 
+    // ── Comparison rendering ──────────────────────────────────────────────────
+
+    function renderComparison(parallel, sequential, inputs) {
+      const el = document.getElementById("calc-results");
+      const N  = inputs.groupSize;
+
+      const diffClass = (a, b) => a < b ? "cmp-better" : a > b ? "cmp-worse" : "";
+
+      // Per-position rows: housed timing + total paid, both models side by side.
+      const posRows = parallel.positions.map((pp, i) => {
+        const ps = sequential.positions[i];
+        return `<tr>
+          <td class="tbl-pos">Position ${pp.position}</td>
+          <td class="${diffClass(pp.monthsUntilHoused, ps.monthsUntilHoused)}">${formatMonths(pp.monthsUntilHoused)}</td>
+          <td class="${diffClass(ps.monthsUntilHoused, pp.monthsUntilHoused)}">${formatMonths(ps.monthsUntilHoused)}</td>
+          <td class="${diffClass(pp.totalPaid, ps.totalPaid)}">${formatDollars(pp.totalPaid)}</td>
+          <td class="${diffClass(ps.totalPaid, pp.totalPaid)}">${formatDollars(ps.totalPaid)}</td>
+        </tr>`;
+      }).join("");
+
+      const tradRow = `<tr class="tbl-trad">
+        <td class="tbl-pos">Traditional path</td>
+        <td colspan="2" style="text-align:center">${formatMonths(parallel.traditional.monthsToSaveDown)} to save + ${inputs.termYears} yr mortgage</td>
+        <td colspan="2" style="text-align:center">${formatDollars(parallel.traditional.totalPaid)}</td>
+      </tr>`;
+
+      el.innerHTML = `
+        <div class="calc-summary">
+          <div class="calc-summary__item">
+            <div class="calc-summary__value">${formatMonths(parallel.totalMonths)}</div>
+            <div class="calc-summary__label">parallel model — total lifetime</div>
+          </div>
+          <div class="calc-summary__item">
+            <div class="calc-summary__value">${formatMonths(sequential.totalMonths)}</div>
+            <div class="calc-summary__label">sequential model — total lifetime</div>
+          </div>
+        </div>
+
+        <p class="calc-note" style="margin-bottom:1rem">
+          <span class="cmp-better-key">Green</span> = better outcome for that metric.
+          <span class="cmp-worse-key">Red</span> = worse.
+          The two models make different trade-offs — neither is strictly better for everyone.
+        </p>
+
+        <div class="tbl-wrapper">
+          <table class="results-table">
+            <thead>
+              <tr>
+                <th rowspan="2">Member</th>
+                <th colspan="2">Months until housed</th>
+                <th colspan="2">Total paid (lifetime)</th>
+              </tr>
+              <tr>
+                <th class="cmp-col-a">Parallel</th>
+                <th class="cmp-col-b">Sequential</th>
+                <th class="cmp-col-a">Parallel</th>
+                <th class="cmp-col-b">Sequential</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${posRows}
+              ${tradRow}
+            </tbody>
+          </table>
+        </div>
+
+        <p class="calc-note">
+          <strong>Parallel model:</strong> fund buys a new house as soon as it accumulates the down payment, while simultaneously servicing all outstanding mortgages. Members get housed faster but the group carries multiple mortgages at once.<br><br>
+          <strong>Sequential model:</strong> each mortgage is paid off completely before saving for the next house. No mortgage debt is ever held simultaneously. Later members wait longer but the group's total interest burden is lower.
+        </p>
+
+        <div class="ledger-buttons">
+          <button class="btn btn--outline ledger-toggle" id="ledger-toggle-parallel" type="button">Show parallel model ledger</button>
+          <button class="btn btn--outline ledger-toggle" id="ledger-toggle-sequential" type="button">Show sequential model ledger</button>
+        </div>
+        <div id="ledger-parallel" hidden></div>
+        <div id="ledger-sequential" hidden></div>
+      `;
+
+      document.getElementById("ledger-toggle-parallel").addEventListener("click", function () {
+        const container = document.getElementById("ledger-parallel");
+        if (!container.hidden) { container.hidden = true; this.textContent = "Show parallel model ledger"; return; }
+        container.hidden = false;
+        this.textContent = "Hide parallel model ledger";
+        if (!container.dataset.rendered) { container.innerHTML = renderLedger(parallel); container.dataset.rendered = "1"; }
+      });
+
+      document.getElementById("ledger-toggle-sequential").addEventListener("click", function () {
+        const container = document.getElementById("ledger-sequential");
+        if (!container.hidden) { container.hidden = true; this.textContent = "Show sequential model ledger"; return; }
+        container.hidden = false;
+        this.textContent = "Hide sequential model ledger";
+        if (!container.dataset.rendered) { container.innerHTML = renderSequentialLedger(sequential); container.dataset.rendered = "1"; }
+      });
+    }
+
+    // ── Sequential ledger rendering ───────────────────────────────────────────
+    //
+    // Each house goes through two phases:
+    //   saving: fund accumulates contributions until it reaches the down payment target
+    //   payoff: all income goes directly to paying down the mortgage each month
+    //
+    // Payoff formula per month:
+    //   interestCharged = mortgageBalanceBefore × (annualRate ÷ 12)
+    //   principalPaid   = totalIncome − interestCharged  (capped at remaining balance)
+    //   overpayment     = max(0, totalIncome − (balance + interest))  → carries to next cycle
+
+    function renderSequentialLedger(result) {
+      // Group ledger entries by house cycle.
+      const cycles = {};
+      for (const entry of result.ledger) {
+        if (!cycles[entry.houseIndex]) cycles[entry.houseIndex] = [];
+        cycles[entry.houseIndex].push(entry);
+      }
+
+      const sections = Object.keys(cycles).map(houseIdx => {
+        const entries = cycles[houseIdx];
+        const rows = entries.map(e => {
+          if (e.phase === 'saving') {
+            const incomeFormula =
+              (e.housedMembers > 0 ? `${e.housedMembers}×${formatDollars(e.c2Income / e.housedMembers)} (C2)` : "") +
+              (e.housedMembers > 0 && e.waitingMembers > 0 ? " + " : "") +
+              (e.waitingMembers > 0 ? `${e.waitingMembers}×${formatDollars(e.c1Income / e.waitingMembers)} (C1)` : "") +
+              (e.donorIncome > 0 ? ` + ${formatDollars(e.donorIncome)} (donor)` : "") +
+              ` = ${formatDollars(e.totalIncome)}`;
+            const event = e.housePurchased
+              ? `<strong class="ledger-event">House ${e.houseIndex} purchased — ${formatDollars(e.downPaymentTarget)} withdrawn</strong>`
+              : "—";
+            return `<tr${e.housePurchased ? ' class="ledger-purchase-row"' : ''}>
+              <td class="ledger-month">${e.month}</td>
+              <td>saving</td>
+              <td class="ledger-formula">${incomeFormula}</td>
+              <td>${formatDollars(e.fundBalance)}</td>
+              <td colspan="4" class="ledger-na">${event}</td>
+            </tr>`;
+          } else {
+            const incomeFormula =
+              `${e.housedMembers}×${formatDollars(e.c2Income / e.housedMembers)} (C2)` +
+              (e.waitingMembers > 0 ? ` + ${e.waitingMembers}×${formatDollars(e.c1Income / e.waitingMembers)} (C1)` : "") +
+              (e.donorIncome > 0 ? ` + ${formatDollars(e.donorIncome)} (donor)` : "") +
+              ` = ${formatDollars(e.totalIncome)}`;
+            const overpayNote = e.overpayment > 0
+              ? `<span class="ledger-extra"> (+${formatDollars(e.overpayment)} carried to next cycle)</span>`
+              : "";
+            return `<tr${e.mortgageBalanceAfter === 0 ? ' class="ledger-purchase-row"' : ''}>
+              <td class="ledger-month">${e.month}</td>
+              <td>payoff</td>
+              <td class="ledger-formula">${incomeFormula}</td>
+              <td class="ledger-na">—</td>
+              <td>${formatDollars(e.mortgageBalanceBefore)}</td>
+              <td class="ledger-interest">${formatDollars(e.interestCharged)}</td>
+              <td class="ledger-pos">${formatDollars(e.principalPaid)}${overpayNote}</td>
+              <td>${formatDollars(e.mortgageBalanceAfter)}</td>
+            </tr>`;
+          }
+        }).join("");
+
+        return `<div class="ledger-section">
+          <h3 class="ledger-heading">House ${houseIdx} cycle</h3>
+          <div class="ledger-scroll">
+            <table class="ledger-table">
+              <thead>
+                <tr>
+                  <th>Month</th>
+                  <th>Phase</th>
+                  <th>Income (formula)</th>
+                  <th>Fund balance</th>
+                  <th>Mortgage balance before</th>
+                  <th>Interest charged</th>
+                  <th>Principal paid</th>
+                  <th>Mortgage balance after</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </div>`;
+      }).join("");
+
+      return `
+        <p class="ledger-formula-key">
+          <strong>Saving phase:</strong> fund accumulates until it reaches the down payment target (${formatDollars(result.ledger.find(e => e.phase === 'saving').downPaymentTarget)}). House is purchased on the month the target is reached.<br>
+          <strong>Payoff phase:</strong> all monthly income goes directly to the mortgage.
+          interest = balance × (rate ÷ 12) | principal paid = income − interest | any overpayment in the final month carries into the next saving cycle.
+        </p>
+        ${sections}
+      `;
+    }
+
     document.getElementById("calc-form").addEventListener("submit", function (e) {
       e.preventDefault();
 
@@ -540,20 +656,20 @@
         monthlyDonorContrib: parseFloat(document.getElementById("monthlyDonorContrib").value) || 0,
       };
 
-      // Basic sanity checks before running simulation.
       if (inputs.c2 <= 0 || inputs.c1 <= 0) {
         renderError("Contributions must be greater than zero.");
         return;
       }
 
-      const result = calculateGroup(inputs);
+      const parallel   = calculateGroup(inputs);
+      const sequential = calculateGroupSequential(inputs);
 
-      if (result.error) {
-        renderError(result.error + " Consider increasing contributions or reducing the home price.");
+      if (parallel.error || sequential.error) {
+        renderError((parallel.error || sequential.error) + " Consider increasing contributions or reducing the home price.");
         return;
       }
 
-      renderResults(result);
+      renderComparison(parallel, sequential, inputs);
     });
   </script>
 
