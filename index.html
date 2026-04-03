@@ -478,21 +478,17 @@
     // models: array of N+1 results from calculateGroup(inputs, 0..N)
     // sequential: result from calculateGroupSequential(inputs)
 
-    function renderComparison(models, sequential, inputs) {
+    function renderComparison(models, inputs) {
       const el         = document.getElementById("calc-results");
       const ledgerArea = document.getElementById("ledger-area");
       const N          = inputs.groupSize;
 
-      // Build labelled model list; sequential is appended last.
-      const allModels = [
-        ...models.map((r, k) => ({
-          key:    k === 0 ? "parallel" : `hybrid-${k}`,
-          label:  k === 0 ? "Parallel" : k === N ? `All seq.` : `Seq. ${k}`,
-          result: r,
-          type:   k === 0 ? "parallel" : "hybrid",
-        })),
-        { key: "sequential", label: "Sequential", result: sequential, type: "sequential" },
-      ].filter(m => !m.result.error);
+      const allModels = models.map((r, k) => ({
+        key:    k === 0 ? "parallel" : `hybrid-${k}`,
+        label:  k === 0 ? "Parallel" : k === N ? "Sequential" : `Seq. ${k}`,
+        result: r,
+        type:   k === 0 ? "parallel" : k === N ? "sequential" : "hybrid",
+      })).filter(m => !m.result.error);
 
       // Color best/worst within each row.
       function tableRows(getValue, fmt) {
@@ -685,21 +681,19 @@
         return;
       }
 
-      // Run calculateGroup for K = 0 (parallel) through K = N (sequential equivalent),
-      // plus the dedicated sequential model for comparison.
+      // Run calculateGroup for K = 0 (parallel) through K = N (sequential).
       const models = [];
       for (let k = 0; k <= inputs.groupSize; k++) {
         models.push(calculateGroup(inputs, k));
       }
-      const sequential = calculateGroupSequential(inputs);
 
       const firstError = models.find(m => m.error);
-      if (firstError || sequential.error) {
-        renderError((firstError?.error || sequential.error) + " Consider increasing contributions or reducing the home price.");
+      if (firstError) {
+        renderError(firstError.error + " Consider increasing contributions or reducing the home price.");
         return;
       }
 
-      renderComparison(models, sequential, inputs);
+      renderComparison(models, inputs);
     });
   </script>
 
