@@ -901,3 +901,148 @@ a.nav__wordmark:hover {
   margin-top: 2rem;
   line-height: 1.6;
 }
+
+/* ── Ledger ─────────────────────────────────────────────────────────────────── */
+
+.ledger-toggle {
+  margin-top: 1.5rem;
+  font-size: 0.85rem;
+}
+
+.btn--outline {
+  background: transparent;
+  border: 2px solid #8B1A1A;
+  color: #8B1A1A;
+  padding: 0.6rem 1.4rem;
+  border-radius: 3px;
+  font-family: "Inter", sans-serif;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.btn--outline:hover {
+  background: #8B1A1A;
+  color: #FAF8F5;
+}
+
+.ledger-section {
+  margin-top: 2.5rem;
+}
+
+.ledger-heading {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.2rem;
+  margin-bottom: 0.75rem;
+  color: #1C1C1C;
+}
+
+.ledger-formula-key {
+  font-size: 0.8rem;
+  line-height: 1.6;
+  background: #f0ece6;
+  border-left: 3px solid #8B1A1A;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  color: #444;
+}
+
+.ledger-scroll {
+  overflow-x: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.ledger-table {
+  border-collapse: collapse;
+  font-size: 0.75rem;
+  font-family: "Inter", sans-serif;
+  min-width: 100%;
+  white-space: nowrap;
+}
+
+.ledger-table th {
+  background: #1C1C1C;
+  color: #FAF8F5;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+}
+
+.ledger-table td {
+  padding: 0.35rem 0.75rem;
+  border-bottom: 1px solid #ece8e2;
+  vertical-align: top;
+}
+
+.ledger-table tr:last-child td {
+  border-bottom: none;
+}
+
+.ledger-table tr:nth-child(even) td {
+  background: #faf8f5;
+}
+
+.ledger-month {
+  font-weight: 600;
+  color: #555;
+}
+
+.ledger-formula {
+  color: #333;
+  font-size: 0.72rem;
+}
+
+.ledger-pos {
+  color: #1a6b1a;
+  font-weight: 600;
+}
+
+.ledger-neg {
+  color: #8B1A1A;
+  font-weight: 600;
+}
+
+.ledger-interest {
+  color: #8B1A1A;
+}
+
+.ledger-extra {
+  color: #1a6b1a;
+  font-weight: 700;
+  font-size: 0.68rem;
+}
+
+.ledger-purchase-row td {
+  background: #fff8e6 !important;
+}
+
+.ledger-event {
+  color: #8B1A1A;
+}
+
+.ledger-paid-off {
+  color: #aaa;
+  font-style: italic;
+  text-align: center;
+}
+
+.ledger-mortgage-header {
+  background: #2e2e2e !important;
+  text-align: center;
+  border-left: 2px solid #555;
+}
+
+.ledger-subcols th {
+  background: #3a3a3a !important;
+  font-size: 0.68rem;
+  font-weight: 400;
+  color: #ccc;
+}
+
+.ledger-housed {
+  color: #555;
+  font-size: 0.72rem;
+}

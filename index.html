@@ -357,6 +357,172 @@
           </table>
         </div>
         <p class="calc-note">Position 1 is housed first and pays more total because they carry more of the group's mortgage burden. Later positions pay less. The union is a collective arrangement — early members subsidize later ones, knowingly.</p>
+        <button class="btn btn--outline ledger-toggle" id="ledger-toggle" type="button">Show month-by-month ledger</button>
+        <div id="ledger-container" hidden></div>
+      `;
+
+      document.getElementById("ledger-toggle").addEventListener("click", function () {
+        const container = document.getElementById("ledger-container");
+        if (!container.hidden) {
+          container.hidden = true;
+          this.textContent = "Show month-by-month ledger";
+          return;
+        }
+        container.hidden = false;
+        this.textContent = "Hide ledger";
+        if (!container.dataset.rendered) {
+          container.innerHTML = renderLedger(result);
+          container.dataset.rendered = "1";
+        }
+      });
+    }
+
+    // ── Ledger rendering ──────────────────────────────────────────────────────
+    //
+    // Phase 1 formula (per month):
+    //   totalIncome      = (postHouseMembers × C2) + (preHouseMembers × C1) + donorIncome
+    //   totalObligations = activeMortgages × mortgagePaymentStd
+    //   netGrowth        = totalIncome − totalObligations
+    //   fundBalance      = fundBalanceStart + netGrowth  [then − downPayment if house bought]
+    //
+    // Phase 2 formula (per month, per mortgage):
+    //   interestCharged      = balanceBefore × (annualRate / 12)
+    //   principalFromPayment = mortgagePaymentStd − interestCharged
+    //   extraPrincipal       = surplus applied to the highest remaining balance
+    //   balanceAfter         = balanceBefore − principalFromPayment − extraPrincipal
+
+    function renderLedger(result) {
+      const phase1 = result.ledger.filter(e => e.phase === 1);
+      const phase2 = result.ledger.filter(e => e.phase === 2);
+
+      // ── Phase 1 table ────────────────────────────────────────────────────
+      const p1Rows = phase1.map(e => {
+        const incomeFormula =
+          (e.postHouseMembers > 0 ? `${e.postHouseMembers}×${formatDollars(e.c2Income / e.postHouseMembers)} (C2)` : "") +
+          (e.postHouseMembers > 0 && e.preHouseMembers > 0 ? " + " : "") +
+          (e.preHouseMembers  > 0 ? `${e.preHouseMembers}×${formatDollars(e.c1Income / e.preHouseMembers)} (C1)` : "") +
+          (e.donorIncome > 0 ? ` + ${formatDollars(e.donorIncome)} (donor)` : "") +
+          ` = ${formatDollars(e.totalIncome)}`;
+
+        const obligationsFormula = e.activeMortgages > 0
+          ? `${e.activeMortgages}×${formatDollars(e.mortgagePaymentStd)} = ${formatDollars(e.totalObligations)}`
+          : "none yet";
+
+        let eventCell = "—";
+        if (e.housePurchased) {
+          eventCell = `<strong class="ledger-event">House ${e.housePurchased.position} purchased</strong><br>` +
+            `−${formatDollars(e.housePurchased.downPaymentWithdrawn)} from fund`;
+        }
+
+        const netClass = e.netGrowth >= 0 ? "ledger-pos" : "ledger-neg";
+
+        return `<tr${e.housePurchased ? ' class="ledger-purchase-row"' : ''}>
+          <td class="ledger-month">${e.month}</td>
+          <td class="ledger-housed">${e.postHouseMembers} / ${e.preHouseMembers}</td>
+          <td class="ledger-formula">${incomeFormula}</td>
+          <td class="ledger-formula">${obligationsFormula}</td>
+          <td class="${netClass}">${formatDollars(e.netGrowth)}</td>
+          <td>${formatDollars(e.fundBalanceStart)}</td>
+          <td>${formatDollars(e.fundBalanceAfterGrowth)}</td>
+          <td>${formatDollars(e.fundBalanceEnd)}</td>
+          <td>${eventCell}</td>
+        </tr>`;
+      }).join("");
+
+      // ── Phase 2 table ────────────────────────────────────────────────────
+      // Column headers: one per mortgage position, showing balance progression.
+      const N = result.positions.length;
+      const mortgageCols = Array.from({ length: N }, (_, i) =>
+        `<th colspan="4" class="ledger-mortgage-header">Mortgage #${i + 1}</th>`
+      ).join("");
+      const mortgageSubcols = Array.from({ length: N }, () =>
+        `<th>Balance before</th><th>Interest</th><th>Principal paid</th><th>Balance after</th>`
+      ).join("");
+
+      const p2Rows = phase2.map(e => {
+        const incomeFormula = `${e.postHouseMembers}×${formatDollars(e.c2Income / e.postHouseMembers)} (C2)` +
+          (e.donorIncome > 0 ? ` + ${formatDollars(e.donorIncome)} (donor)` : "") +
+          ` = ${formatDollars(e.totalIncome)}`;
+
+        const obligationsFormula = `${e.activeMortgages}×${formatDollars(e.mortgagePaymentStd)} = ${formatDollars(e.totalObligations)}`;
+
+        const mortgageCells = e.mortgageDetails.map(d => {
+          if (d.balanceBefore === 0 && d.balanceAfter === 0) {
+            return `<td colspan="4" class="ledger-paid-off">paid off</td>`;
+          }
+          const principalTotal = d.principalFromPayment + d.extraPrincipal;
+          const extraNote = d.extraPrincipal > 0
+            ? ` <span class="ledger-extra">(+${formatDollars(d.extraPrincipal)} surplus)</span>`
+            : "";
+          return `<td>${formatDollars(d.balanceBefore)}</td>` +
+            `<td class="ledger-interest">${formatDollars(d.interestCharged)}</td>` +
+            `<td>${formatDollars(principalTotal)}${extraNote}</td>` +
+            `<td>${formatDollars(d.balanceAfter)}</td>`;
+        }).join("");
+
+        return `<tr>
+          <td class="ledger-month">${e.month}</td>
+          <td class="ledger-formula">${incomeFormula}</td>
+          <td class="ledger-formula">${obligationsFormula}</td>
+          <td class="ledger-pos">${formatDollars(e.surplus)}</td>
+          ${mortgageCells}
+        </tr>`;
+      }).join("");
+
+      return `
+        <div class="ledger-section">
+          <h3 class="ledger-heading">Phase 1 — Buying houses</h3>
+          <p class="ledger-formula-key">
+            <strong>Income</strong> = (housed members × C2) + (waiting members × C1) + donor contribution<br>
+            <strong>Obligations</strong> = number of active mortgages × standard monthly payment (${formatDollars(phase1[0] ? phase1[0].mortgagePaymentStd : 0)}/mo)<br>
+            <strong>Net growth</strong> = Income − Obligations, added to fund balance each month<br>
+            When fund balance ≥ down payment target, the next house is purchased and the down payment is withdrawn.
+          </p>
+          <div class="ledger-scroll">
+            <table class="ledger-table">
+              <thead>
+                <tr>
+                  <th>Month</th>
+                  <th>Housed / Waiting</th>
+                  <th>Income (formula)</th>
+                  <th>Obligations (formula)</th>
+                  <th>Net growth</th>
+                  <th>Fund: start</th>
+                  <th>Fund: after growth</th>
+                  <th>Fund: end of month</th>
+                  <th>Event</th>
+                </tr>
+              </thead>
+              <tbody>${p1Rows}</tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="ledger-section">
+          <h3 class="ledger-heading">Phase 2 — Paying off mortgages</h3>
+          <p class="ledger-formula-key">
+            All members are housed. Every month: collect C2 from all ${N} members, make the standard payment on each active mortgage, then apply any surplus to the mortgage with the highest remaining balance.<br>
+            <strong>Per mortgage each month:</strong> interest = balance × (rate ÷ 12) | principal from payment = standard payment − interest | extra principal = surplus (shown in bold where applied)
+          </p>
+          <div class="ledger-scroll">
+            <table class="ledger-table">
+              <thead>
+                <tr>
+                  <th>Month</th>
+                  <th>Income (formula)</th>
+                  <th>Obligations (formula)</th>
+                  <th>Surplus</th>
+                  ${mortgageCols}
+                </tr>
+                <tr class="ledger-subcols">
+                  <th colspan="4"></th>
+                  ${mortgageSubcols}
+                </tr>
+              </thead>
+              <tbody>${p2Rows}</tbody>
+            </table>
+          </div>
+        </div>
       `;
     }
 
