@@ -1,0 +1,903 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   style.css — The Homebuyers Union
+   Mobile-first. No framework. No build step.
+   Palette: #FAF8F5 off-white · #1C1C1C charcoal · #8B1A1A union red
+───────────────────────────────────────────────────────────────────────────── */
+
+/* ── Reset & base ──────────────────────────────────────────────────────────── */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  font-size: 16px;
+}
+
+body {
+  font-family: "Inter", system-ui, sans-serif;
+  background-color: #FAF8F5;
+  color: #1C1C1C;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+a:hover {
+  color: #8B1A1A;
+}
+
+/* ── Typography scale ──────────────────────────────────────────────────────── */
+
+h1, h2, h3 {
+  font-family: "Playfair Display", Georgia, serif;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+/* ── Layout utilities ──────────────────────────────────────────────────────── */
+
+.container {
+  width: 100%;
+  max-width: 1080px;
+  margin-inline: auto;
+  padding-inline: 1.25rem;
+}
+
+.container--narrow {
+  max-width: 680px;
+}
+
+.two-col {
+  display: grid;
+  gap: 2rem;
+}
+
+@media (min-width: 700px) {
+  .two-col {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* ── Scroll-reveal ─────────────────────────────────────────────────────────── */
+
+.reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.55s ease, transform 0.55s ease;
+}
+
+.revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ── Buttons ───────────────────────────────────────────────────────────────── */
+
+.btn {
+  display: inline-block;
+  padding: 0.85rem 2rem;
+  border-radius: 3px;
+  font-family: "Inter", sans-serif;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  border: 2px solid transparent;
+  text-decoration: none;
+  transition: background-color 0.18s, color 0.18s, border-color 0.18s;
+  line-height: 1;
+}
+
+.btn--primary {
+  background-color: #8B1A1A;
+  color: #FAF8F5;
+  border-color: #8B1A1A;
+}
+
+.btn--primary:hover {
+  background-color: #6e1414;
+  border-color: #6e1414;
+  color: #FAF8F5;
+}
+
+.btn--white {
+  background-color: #FAF8F5;
+  color: #8B1A1A;
+  border-color: #FAF8F5;
+}
+
+.btn--white:hover {
+  background-color: #ede9e3;
+  border-color: #ede9e3;
+  color: #8B1A1A;
+}
+
+/* ── Navigation ────────────────────────────────────────────────────────────── */
+
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background-color: #1C1C1C;
+  border-bottom: 1px solid #2d2d2d;
+}
+
+.nav__inner {
+  max-width: 1080px;
+  margin-inline: auto;
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nav__wordmark {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #FAF8F5;
+  text-decoration: none;
+  letter-spacing: -0.01em;
+}
+
+a.nav__wordmark:hover {
+  color: #e8a8a8;
+}
+
+.nav__link {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #c8c4be;
+  text-decoration: none;
+  letter-spacing: 0.02em;
+  border-bottom: 1px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.nav__link:hover {
+  color: #FAF8F5;
+  border-bottom-color: #8B1A1A;
+}
+
+/* ── Hero ──────────────────────────────────────────────────────────────────── */
+
+.hero {
+  background-color: #1C1C1C;
+  color: #FAF8F5;
+  padding: 5rem 1.25rem 4.5rem;
+}
+
+.hero--donors {
+  background-color: #2a0a0a;
+}
+
+.hero__inner {
+  max-width: 720px;
+  margin-inline: auto;
+}
+
+.hero__headline {
+  font-size: clamp(2.4rem, 6vw, 4rem);
+  font-weight: 900;
+  line-height: 1.1;
+  margin-bottom: 1.25rem;
+  color: #FAF8F5;
+}
+
+.hero__subhead {
+  font-size: clamp(1rem, 2.5vw, 1.2rem);
+  line-height: 1.6;
+  color: #c8c4be;
+  margin-bottom: 2.25rem;
+  max-width: 560px;
+}
+
+/* ── Sections ──────────────────────────────────────────────────────────────── */
+
+.section {
+  padding: 4.5rem 1.25rem;
+}
+
+.section--alt {
+  background-color: #f0ece5;
+}
+
+.section--red {
+  background-color: #8B1A1A;
+  color: #FAF8F5;
+}
+
+.section__headline {
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  margin-bottom: 0.75rem;
+}
+
+.section__headline--light {
+  color: #FAF8F5;
+}
+
+.section__lead {
+  font-size: 1.1rem;
+  color: #555;
+  margin-bottom: 2.5rem;
+  max-width: 640px;
+}
+
+.section__lead--light {
+  color: #e8c8c8;
+}
+
+.section__callout {
+  margin-top: 2.5rem;
+  font-size: 1.15rem;
+  font-family: "Playfair Display", Georgia, serif;
+  font-style: italic;
+  color: #8B1A1A;
+  text-align: center;
+}
+
+/* ── Problem grid ──────────────────────────────────────────────────────────── */
+
+.problem-grid {
+  display: grid;
+  gap: 1.5rem;
+}
+
+@media (min-width: 600px) {
+  .problem-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.problem-card {
+  background-color: #FAF8F5;
+  border: 1px solid #ddd9d2;
+  border-radius: 4px;
+  padding: 1.75rem 1.5rem;
+}
+
+.section--alt .problem-card {
+  background-color: #FAF8F5;
+}
+
+.problem-card__figure {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 2.25rem;
+  font-weight: 700;
+  color: #8B1A1A;
+  line-height: 1;
+  margin-bottom: 0.35rem;
+}
+
+.problem-card__label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #666;
+  margin-bottom: 0.85rem;
+}
+
+.problem-card__detail {
+  font-size: 0.9rem;
+  color: #444;
+  line-height: 1.6;
+}
+
+/* ── Steps ─────────────────────────────────────────────────────────────────── */
+
+.steps {
+  list-style: none;
+  counter-reset: step-counter;
+  display: grid;
+  gap: 0;
+}
+
+.steps__item {
+  display: flex;
+  gap: 1.25rem;
+  align-items: flex-start;
+  padding: 1.5rem 0;
+  border-bottom: 1px solid #d6d0c9;
+  position: relative;
+}
+
+.steps__item:last-child {
+  border-bottom: none;
+}
+
+.steps__marker {
+  flex-shrink: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  background-color: #8B1A1A;
+  color: #FAF8F5;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-top: 0.1rem;
+}
+
+.steps__content {
+  font-size: 0.975rem;
+  line-height: 1.65;
+  color: #333;
+  padding-top: 0.35rem;
+}
+
+.steps__content strong {
+  display: block;
+  font-size: 1.05rem;
+  color: #1C1C1C;
+  margin-bottom: 0.4rem;
+}
+
+/* ── Calculator ─────────────────────────────────────────────────────────────── */
+
+.calc-layout {
+  display: grid;
+  gap: 2.5rem;
+}
+
+@media (min-width: 800px) {
+  .calc-layout {
+    grid-template-columns: 340px 1fr;
+    align-items: start;
+  }
+}
+
+.calc-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.calc-fieldset {
+  border: 1px solid #ddd9d2;
+  border-radius: 4px;
+  padding: 1.25rem 1.25rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.calc-legend {
+  font-family: "Inter", sans-serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #8B1A1A;
+  padding-inline: 0.35rem;
+}
+
+.calc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.calc-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #444;
+}
+
+.calc-input {
+  font-family: "Inter", sans-serif;
+  font-size: 1rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #ccc8c0;
+  border-radius: 3px;
+  background-color: #FAF8F5;
+  color: #1C1C1C;
+  width: 100%;
+  transition: border-color 0.15s;
+}
+
+.calc-input:focus {
+  outline: none;
+  border-color: #8B1A1A;
+  box-shadow: 0 0 0 2px rgba(139, 26, 26, 0.12);
+}
+
+.calc-submit {
+  align-self: flex-start;
+}
+
+.calc-results {
+  min-height: 120px;
+}
+
+.calc-results__placeholder {
+  color: #888;
+  font-style: italic;
+  font-size: 0.95rem;
+  padding-top: 0.5rem;
+}
+
+.calc-error {
+  color: #8B1A1A;
+  font-weight: 500;
+  padding: 1rem;
+  border: 1px solid #c87070;
+  border-radius: 4px;
+  background-color: #fdf0f0;
+}
+
+/* Calculator summary row */
+
+.calc-summary {
+  display: flex;
+  gap: 2rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.calc-summary__item {
+  min-width: 140px;
+}
+
+.calc-summary__value {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.85rem;
+  font-weight: 700;
+  color: #8B1A1A;
+  line-height: 1;
+  margin-bottom: 0.2rem;
+}
+
+.calc-summary__label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #666;
+}
+
+/* Results table */
+
+.tbl-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid #ddd9d2;
+  border-radius: 4px;
+}
+
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.results-table th {
+  background-color: #1C1C1C;
+  color: #FAF8F5;
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.65rem 0.85rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.results-table td {
+  padding: 0.65rem 0.85rem;
+  border-bottom: 1px solid #e8e4de;
+  vertical-align: middle;
+}
+
+.results-table tr:last-child td {
+  border-bottom: none;
+}
+
+.results-table tr:nth-child(even) td {
+  background-color: #f7f4f0;
+}
+
+.tbl-pos {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tbl-trad td {
+  background-color: #f0ece5 !important;
+  color: #555;
+  font-style: italic;
+}
+
+.savings {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.savings.positive {
+  color: #1a6e2e;
+}
+
+.savings.negative {
+  color: #8B1A1A;
+}
+
+.calc-note {
+  margin-top: 1rem;
+  font-size: 0.85rem;
+  color: #666;
+  line-height: 1.55;
+  max-width: 580px;
+  font-style: italic;
+}
+
+/* ── Who it's for / two-col text ───────────────────────────────────────────── */
+
+.two-col p {
+  font-size: 0.975rem;
+  margin-bottom: 1.1rem;
+  color: #333;
+}
+
+.two-col p:last-child {
+  margin-bottom: 0;
+}
+
+/* ── Why it works ──────────────────────────────────────────────────────────── */
+
+.why-grid {
+  display: grid;
+  gap: 1.25rem;
+  margin-bottom: 2rem;
+}
+
+@media (min-width: 600px) {
+  .why-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.why-card {
+  background-color: #FAF8F5;
+  border: 1px solid #ddd9d2;
+  border-top: 3px solid #8B1A1A;
+  border-radius: 4px;
+  padding: 1.5rem 1.25rem;
+}
+
+.why-card__title {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1C1C1C;
+  margin-bottom: 0.75rem;
+  line-height: 1.3;
+}
+
+.why-card p {
+  font-size: 0.9rem;
+  color: #444;
+  line-height: 1.65;
+}
+
+.why-note {
+  background-color: #f0ece5;
+  border-left: 3px solid #8B1A1A;
+  padding: 1.25rem 1.5rem;
+  border-radius: 0 4px 4px 0;
+  font-size: 0.95rem;
+  color: #333;
+  line-height: 1.6;
+}
+
+/* ── Waitlist form ─────────────────────────────────────────────────────────── */
+
+.waitlist-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 480px;
+}
+
+.waitlist-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.waitlist-label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #e8c8c8;
+}
+
+.waitlist-input {
+  font-family: "Inter", sans-serif;
+  font-size: 1rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #FAF8F5;
+  width: 100%;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.waitlist-input::placeholder {
+  color: rgba(250, 248, 245, 0.4);
+}
+
+.waitlist-input:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.6);
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+.waitlist-success {
+  font-size: 1.1rem;
+  color: #FAF8F5;
+  padding: 1.25rem 0;
+  font-family: "Playfair Display", Georgia, serif;
+  font-style: italic;
+}
+
+/* ── Footer ────────────────────────────────────────────────────────────────── */
+
+.footer {
+  background-color: #141414;
+  color: #999;
+  padding: 2.5rem 1.25rem;
+  font-size: 0.85rem;
+  line-height: 1.65;
+}
+
+.footer .container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.footer__disclaimer {
+  max-width: 640px;
+}
+
+.footer__contact a {
+  color: #c8c4be;
+  text-decoration: none;
+}
+
+.footer__contact a:hover {
+  color: #FAF8F5;
+}
+
+/* ── Donor page — impact section ───────────────────────────────────────────── */
+
+.impact-layout {
+  display: grid;
+  gap: 2.5rem;
+}
+
+@media (min-width: 800px) {
+  .impact-layout {
+    grid-template-columns: 1fr 280px;
+    align-items: start;
+  }
+}
+
+.impact-main p {
+  font-size: 0.975rem;
+  color: #333;
+  margin-bottom: 1.1rem;
+  line-height: 1.7;
+}
+
+.impact-example {
+  margin-top: 1.5rem;
+  background-color: #FAF8F5;
+  border: 1px solid #ddd9d2;
+  border-left: 3px solid #8B1A1A;
+  padding: 1.25rem 1.5rem;
+  border-radius: 0 4px 4px 0;
+}
+
+.impact-example__label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #8B1A1A;
+  margin-bottom: 0.5rem;
+}
+
+.impact-example p {
+  font-size: 0.9rem;
+  color: #333;
+  margin-bottom: 0 !important;
+}
+
+.impact-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.impact-stat {
+  background-color: #FAF8F5;
+  border: 1px solid #ddd9d2;
+  border-radius: 4px;
+  padding: 1.25rem;
+}
+
+.impact-stat__value {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #8B1A1A;
+  margin-bottom: 0.35rem;
+}
+
+.impact-stat__desc {
+  font-size: 0.85rem;
+  color: #555;
+  line-height: 1.5;
+}
+
+/* ── No returns section ────────────────────────────────────────────────────── */
+
+.section .container--narrow p {
+  font-size: 0.975rem;
+  color: #333;
+  margin-bottom: 1.1rem;
+  line-height: 1.7;
+}
+
+.section .container--narrow p:last-child {
+  margin-bottom: 0;
+}
+
+/* ── Governance grid ───────────────────────────────────────────────────────── */
+
+.governance-grid {
+  display: grid;
+  gap: 1.25rem;
+}
+
+@media (min-width: 600px) {
+  .governance-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.governance-card {
+  background-color: #FAF8F5;
+  border: 1px solid #ddd9d2;
+  border-radius: 4px;
+  padding: 1.5rem 1.25rem;
+}
+
+.governance-card__title {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1C1C1C;
+  margin-bottom: 0.65rem;
+  line-height: 1.3;
+}
+
+.governance-card p {
+  font-size: 0.9rem;
+  color: #444;
+  line-height: 1.65;
+}
+
+.coming-soon {
+  display: inline-block;
+  font-family: "Inter", sans-serif;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background-color: #e8d9b0;
+  color: #7a5a00;
+  border-radius: 3px;
+  padding: 0.15em 0.45em;
+  vertical-align: middle;
+  margin-left: 0.4rem;
+}
+
+/* ── Donation tiers ────────────────────────────────────────────────────────── */
+
+.tiers {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 2.5rem;
+}
+
+@media (min-width: 600px) {
+  .tiers {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.tier {
+  background-color: rgba(250, 248, 245, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  padding: 1.5rem 1.25rem;
+}
+
+.tier--featured {
+  background-color: rgba(250, 248, 245, 0.18);
+  border-color: rgba(255, 255, 255, 0.45);
+}
+
+.tier__amount {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #FAF8F5;
+  margin-bottom: 0.6rem;
+}
+
+.tier__impact {
+  font-size: 0.875rem;
+  color: #e8c8c8;
+  line-height: 1.6;
+}
+
+/* ── Donate form wrap ──────────────────────────────────────────────────────── */
+
+.donate-form-wrap {
+  max-width: 480px;
+  margin-bottom: 1.5rem;
+}
+
+.donate-notice {
+  font-size: 0.95rem;
+  color: #e8c8c8;
+  margin-bottom: 1.25rem;
+  line-height: 1.6;
+}
+
+.donate-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 1rem;
+}
+
+.donate-notify-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.donate-success {
+  font-size: 1rem;
+  color: #FAF8F5;
+  font-family: "Playfair Display", Georgia, serif;
+  font-style: italic;
+  padding: 0.75rem 0;
+}
+
+.donate-tax-note {
+  font-size: 0.8rem;
+  color: rgba(250, 248, 245, 0.55);
+  margin-top: 2rem;
+  line-height: 1.6;
+}
