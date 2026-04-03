@@ -33,18 +33,39 @@ function remainingBalance(principal, annualRatePct, termYears, monthsPaid) {
 // ─── Traditional path comparison ─────────────────────────────────────────────
 
 // Computes total cost of the traditional homeownership path:
-//   1. Saving C1/month until you accumulate the down payment.
+//   1. Saving C1/month (with compound interest at fundYieldPct) until the
+//      down payment is accumulated.
 //   2. Paying the full mortgage over the loan term.
+//
+// Savings period uses the future-value-of-annuity formula:
+//   FV = c1 × ((1+r)^n − 1) / r  →  n = log(1 + FV×r/c1) / log(1+r)
+// When fundYieldPct is 0, this reduces to the simple n = ceil(downPayment/c1).
+//
+// totalPaid = contributions made during savings + total mortgage payments.
+// Interest earned on savings is NOT counted as a cost — it reduces the number
+// of months of contributions needed.
+//
 // Returns { monthsToSaveDown, totalPaid }.
-function traditionalPath(homePrice, downPaymentPct, c1, annualRatePct, termYears) {
-  const downPayment = homePrice * downPaymentPct;
-  const monthsToSaveDown = Math.ceil(downPayment / c1);
+function traditionalPath(homePrice, downPaymentPct, c1, annualRatePct, termYears, fundYieldPct = 0) {
+  const downPayment  = homePrice * downPaymentPct;
   const loanPrincipal = homePrice - downPayment;
-  const payment = monthlyMortgagePayment(loanPrincipal, annualRatePct, termYears);
+  const r            = fundYieldPct / 100 / 12;
+
+  let monthsToSaveDown;
+  if (r === 0) {
+    monthsToSaveDown = Math.ceil(downPayment / c1);
+  } else {
+    // Solve for n: c1 × ((1+r)^n − 1) / r = downPayment
+    // n = log(1 + downPayment × r / c1) / log(1 + r)
+    monthsToSaveDown = Math.ceil(Math.log(1 + downPayment * r / c1) / Math.log(1 + r));
+  }
+
+  const payment           = monthlyMortgagePayment(loanPrincipal, annualRatePct, termYears);
   const totalMortgagePaid = payment * termYears * 12;
+
   return {
     monthsToSaveDown,
-    totalPaid: downPayment + totalMortgagePaid,
+    totalPaid: monthsToSaveDown * c1 + totalMortgagePaid,
   };
 }
 
@@ -308,7 +329,7 @@ function calculateGroup(inputs) {
   }
 
   const totalMonths = month;
-  const trad        = traditionalPath(homePrice, downPaymentPct, c1, annualRatePct, termYears);
+  const trad        = traditionalPath(homePrice, downPaymentPct, c1, annualRatePct, termYears, fundYieldPct);
 
   const positions = housedAtMonth.map((housedMonth, k) => ({
     position: k + 1,
@@ -498,7 +519,7 @@ function calculateGroupSequential(inputs) {
   }
 
   const totalMonths = month;
-  const trad        = traditionalPath(homePrice, downPaymentPct, c1, annualRatePct, termYears);
+  const trad        = traditionalPath(homePrice, downPaymentPct, c1, annualRatePct, termYears, fundYieldPct);
 
   const positions = housedAtMonth.map((housedMonth, k) => ({
     position: k + 1,
