@@ -352,21 +352,22 @@ a.nav__wordmark:hover {
 /* ── Calculator ─────────────────────────────────────────────────────────────── */
 
 .calc-layout {
-  display: grid;
-  gap: 2.5rem;
-}
-
-@media (min-width: 800px) {
-  .calc-layout {
-    grid-template-columns: 340px 1fr;
-    align-items: start;
-  }
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
 }
 
 .calc-form {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 1.5rem;
+  align-items: start;
+}
+
+@media (max-width: 599px) {
+  .calc-form {
+    grid-template-columns: 1fr;
+  }
 }
 
 .calc-fieldset {
@@ -419,7 +420,8 @@ a.nav__wordmark:hover {
 }
 
 .calc-submit {
-  align-self: flex-start;
+  grid-column: 1 / -1;
+  justify-self: start;
 }
 
 .calc-results {
