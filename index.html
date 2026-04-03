@@ -509,37 +509,39 @@
       const headerCells = allModelsWithTrad.map(m => `<th>${m.label}</th>`).join("");
 
       // Combined rows: months until housed + total paid in each cell.
+      // Colors are relative to the Traditional column: green = better, red = worse.
       function tableRows() {
         return Array.from({ length: N }, (_, i) => {
-          const monthVals = allModelsWithTrad.map(m => m.result.positions[i].monthsUntilHoused);
-          const paidVals  = allModelsWithTrad.map(m => m.result.positions[i].totalPaid);
-          const monthMin  = Math.min(...monthVals), monthMax = Math.max(...monthVals);
-          const paidMin   = Math.min(...paidVals),  paidMax  = Math.max(...paidVals);
-          const cells = allModelsWithTrad.map((m, j) => {
-            const mCls = monthVals[j] === monthMin ? "cmp-better" : monthVals[j] === monthMax ? "cmp-worse" : "";
-            const pCls = paidVals[j]  === paidMin  ? "cmp-better" : paidVals[j]  === paidMax  ? "cmp-worse" : "";
-            return `<td><span class="${mCls}">${formatMonths(monthVals[j])}</span><span class="ledger-sub ${pCls}">${formatDollars(paidVals[j])}</span></td>`;
+          const tradPos   = tradResult.positions[i];
+          const cells = allModelsWithTrad.map(m => {
+            const pos  = m.result.positions[i];
+            const isTrad = m.type === "traditional";
+            const mCls = isTrad ? "" : pos.monthsUntilHoused < tradPos.monthsUntilHoused ? "cmp-better"
+                                     : pos.monthsUntilHoused > tradPos.monthsUntilHoused ? "cmp-worse" : "";
+            const pCls = isTrad ? "" : pos.totalPaid < tradPos.totalPaid ? "cmp-better"
+                                     : pos.totalPaid > tradPos.totalPaid ? "cmp-worse" : "";
+            return `<td><span class="${mCls}">${formatMonths(pos.monthsUntilHoused)}</span><span class="ledger-sub ${pCls}">${formatDollars(pos.totalPaid)}</span></td>`;
           }).join("");
           return `<tr><td class="tbl-pos">Position ${i + 1}</td>${cells}</tr>`;
         }).join("");
       }
 
-      const totalVals = allModelsWithTrad.map(m => m.result.totalMonths);
-      const totalMin  = Math.min(...totalVals);
-      const totalMax  = Math.max(...totalVals);
+      const tradTotal = tradResult.totalMonths;
       const totalRow  = `<tr class="tbl-total"><td class="tbl-pos"><em>Group total</em></td>${
-        totalVals.map(v => {
-          const cls = v === totalMin ? "cmp-better" : v === totalMax ? "cmp-worse" : "";
+        allModelsWithTrad.map(m => {
+          const v   = m.result.totalMonths;
+          const cls = m.type === "traditional" ? ""
+                    : v < tradTotal ? "cmp-better"
+                    : v > tradTotal ? "cmp-worse" : "";
           return `<td class="${cls}">${formatMonths(v)}</td>`;
         }).join("")
       }</tr>`;
 
       el.innerHTML = `
         <p class="calc-note" style="margin-bottom:0.5rem">
-          <span class="cmp-better-key">Green</span> = best in row.
-          <span class="cmp-worse-key">Red</span> = worst.
+          <span class="cmp-better-key">Green</span> = better than traditional.
+          <span class="cmp-worse-key">Red</span> = worse than traditional.
           "Seq. K" means the first K mortgages are paid off completely before switching to parallel for the rest.
-          Traditional = save down payment alone then carry a solo mortgage.
         </p>
         <p class="calc-note" style="font-size:0.75rem;margin-bottom:1rem">Each cell: months until housed / total paid lifetime</p>
 
