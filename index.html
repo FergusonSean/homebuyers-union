@@ -506,19 +506,24 @@
       // Add traditional and accelerated-traditional columns for comparison.
       // Neither has a ledger so both are excluded from the ledger buttons.
       const trad = models[0].traditional;
+      const tradTotalMonths = trad.monthsToSaveDown + inputs.termYears * 12;
       const tradResult = {
         positions: Array.from({ length: N }, () => ({
-          monthsUntilHoused: trad.monthsToSaveDown,
-          totalPaid:         trad.totalPaid,
+          monthsUntilHoused:  trad.monthsToSaveDown,
+          monthsHoused:       inputs.termYears * 12,
+          totalPaid:          trad.totalPaid,
+          costPerMonthHoused: Math.round(trad.totalPaid / (inputs.termYears * 12)),
         })),
-        totalMonths: trad.monthsToSaveDown + inputs.termYears * 12,
+        totalMonths: tradTotalMonths,
         error: null,
       };
       const accel = trad.accelerated;
       const tradAccelResult = {
         positions: Array.from({ length: N }, () => ({
-          monthsUntilHoused: accel.monthsToSaveDown,
-          totalPaid:         accel.totalPaid,
+          monthsUntilHoused:  accel.monthsToSaveDown,
+          monthsHoused:       accel.monthsToPayoff,
+          totalPaid:          accel.totalPaid,
+          costPerMonthHoused: accel.monthsToPayoff > 0 ? Math.round(accel.totalPaid / accel.monthsToPayoff) : 0,
         })),
         totalMonths: accel.totalMonths,
         error: null,
@@ -531,37 +536,43 @@
 
       const headerCells = allModelsWithTrad.map(m => `<th>${m.label}</th>`).join("");
 
-      // Combined rows: months until housed + total paid in each cell.
+      // Combined rows: months until housed / total paid / cost per month housed.
       // Colors are relative to the Traditional column: green = better, red = worse.
       function tableRows() {
         return Array.from({ length: N }, (_, i) => {
-          const tradPos   = tradResult.positions[i];
+          const tradPos = tradResult.positions[i];
           const cells = allModelsWithTrad.map(m => {
-            const pos  = m.result.positions[i];
+            const pos    = m.result.positions[i];
             const isTrad = m.type === "traditional";
             const mCls = isTrad ? "" : pos.monthsUntilHoused < tradPos.monthsUntilHoused ? "cmp-better"
                                      : pos.monthsUntilHoused > tradPos.monthsUntilHoused ? "cmp-worse" : "";
             const pCls = isTrad ? "" : pos.totalPaid < tradPos.totalPaid ? "cmp-better"
                                      : pos.totalPaid > tradPos.totalPaid ? "cmp-worse" : "";
-            return `<td><span class="${mCls}">${formatMonths(pos.monthsUntilHoused)}</span><span class="ledger-sub ${pCls}">${formatDollars(pos.totalPaid)}</span></td>`;
+            const rCls = isTrad ? "" : pos.costPerMonthHoused < tradPos.costPerMonthHoused ? "cmp-better"
+                                     : pos.costPerMonthHoused > tradPos.costPerMonthHoused ? "cmp-worse" : "";
+            return `<td><span class="${mCls}">${formatMonths(pos.monthsUntilHoused)}</span><span class="ledger-sub ${pCls}">${formatDollars(pos.totalPaid)}</span><span class="ledger-sub ${rCls}">${formatDollars(pos.costPerMonthHoused)}/mo housed</span></td>`;
           }).join("");
           return `<tr><td class="tbl-pos">Position ${i + 1}</td>${cells}</tr>`;
         }).join("");
       }
 
-      const tradTotal    = tradResult.totalMonths;
+      const tradTotal     = tradResult.totalMonths;
       const tradTotalPaid = tradResult.positions.reduce((s, p) => s + p.totalPaid, 0);
+      const tradPersonMonths = tradResult.positions.reduce((s, p) => s + p.monthsHoused, 0);
       const totalRow  = `<tr class="tbl-total"><td class="tbl-pos"><em>Group total</em></td>${
         allModelsWithTrad.map(m => {
-          const v         = m.result.totalMonths;
-          const groupPaid = m.result.positions.reduce((s, p) => s + p.totalPaid, 0);
+          const v            = m.result.totalMonths;
+          const groupPaid    = m.result.positions.reduce((s, p) => s + p.totalPaid, 0);
+          const personMonths = m.result.positions.reduce((s, p) => s + p.monthsHoused, 0);
+          const costPerPM    = personMonths > 0 ? Math.round(groupPaid / personMonths) : 0;
+          const tradCostPerPM = tradPersonMonths > 0 ? Math.round(tradTotalPaid / tradPersonMonths) : 0;
           const mCls = m.type === "traditional" ? ""
-                     : v < tradTotal ? "cmp-better"
-                     : v > tradTotal ? "cmp-worse" : "";
+                     : v < tradTotal ? "cmp-better" : v > tradTotal ? "cmp-worse" : "";
           const pCls = m.type === "traditional" ? ""
-                     : groupPaid < tradTotalPaid ? "cmp-better"
-                     : groupPaid > tradTotalPaid ? "cmp-worse" : "";
-          return `<td><span class="${mCls}">${formatMonths(v)}</span><span class="ledger-sub ${pCls}">${formatDollars(groupPaid)}</span></td>`;
+                     : groupPaid < tradTotalPaid ? "cmp-better" : groupPaid > tradTotalPaid ? "cmp-worse" : "";
+          const rCls = m.type === "traditional" ? ""
+                     : costPerPM < tradCostPerPM ? "cmp-better" : costPerPM > tradCostPerPM ? "cmp-worse" : "";
+          return `<td><span class="${mCls}">${formatMonths(v)}</span><span class="ledger-sub ${pCls}">${formatDollars(groupPaid)}</span><span class="ledger-sub ${rCls}">${formatDollars(costPerPM)}/mo housed</span></td>`;
         }).join("")
       }</tr>`;
 
@@ -572,7 +583,7 @@
           "Seq. K" means the first K mortgages are paid off completely before switching to parallel for the rest.
           "Trad. (pay C2)" is the traditional path but paying your post-move-in amount each month instead of the standard payment.
         </p>
-        <p class="calc-note" style="font-size:0.75rem;margin-bottom:1rem">Each cell: months until housed / total paid lifetime</p>
+        <p class="calc-note" style="font-size:0.75rem;margin-bottom:1rem">Each cell: months until housed / total paid lifetime / avg cost per month housed</p>
 
         <div class="tbl-wrapper">
           <table class="results-table">

@@ -499,12 +499,18 @@ function calculateGroup(inputs, sequentialCount = 0) {
   const trad        = traditionalPath(homePrice, 0.20, c1, annualRatePct, termYears, fundYieldPct, housingCostsMonthly);
   const tradAccel   = traditionalAcceleratedPath(homePrice, c1, c2, annualRatePct, termYears, fundYieldPct, housingCostsMonthly);
 
-  const positions = housedAtMonth.map((housedMonth, k) => ({
-    position: k + 1,
-    monthsUntilHoused: housedMonth,
-    totalPaid: Math.round(totalPaid[k]),
-    savedVsTraditional: Math.round(trad.totalPaid - totalPaid[k]),
-  }));
+  const positions = housedAtMonth.map((housedMonth, k) => {
+    const paid         = Math.round(totalPaid[k]);
+    const monthsHoused = totalMonths - housedMonth;
+    return {
+      position: k + 1,
+      monthsUntilHoused: housedMonth,
+      monthsHoused,
+      totalPaid: paid,
+      costPerMonthHoused: monthsHoused > 0 ? Math.round(paid / monthsHoused) : 0,
+      savedVsTraditional: Math.round(trad.totalPaid - paid),
+    };
+  });
 
   return {
     positions,
@@ -711,12 +717,18 @@ function calculateGroupSequential(inputs) {
   const trad        = traditionalPath(homePrice, 0.20, c1, annualRatePct, termYears, fundYieldPct, housingCostsMonthly);
   const tradAccel   = traditionalAcceleratedPath(homePrice, c1, c2, annualRatePct, termYears, fundYieldPct, housingCostsMonthly);
 
-  const positions = housedAtMonth.map((housedMonth, k) => ({
-    position: k + 1,
-    monthsUntilHoused: housedMonth,
-    totalPaid: Math.round(totalPaid[k]),
-    savedVsTraditional: Math.round(trad.totalPaid - totalPaid[k]),
-  }));
+  const positions = housedAtMonth.map((housedMonth, k) => {
+    const paid         = Math.round(totalPaid[k]);
+    const monthsHoused = totalMonths - housedMonth;
+    return {
+      position: k + 1,
+      monthsUntilHoused: housedMonth,
+      monthsHoused,
+      totalPaid: paid,
+      costPerMonthHoused: monthsHoused > 0 ? Math.round(paid / monthsHoused) : 0,
+      savedVsTraditional: Math.round(trad.totalPaid - paid),
+    };
+  });
 
   return {
     positions,
