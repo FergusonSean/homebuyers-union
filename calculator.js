@@ -71,13 +71,16 @@ function traditionalPath(homePrice, downPaymentPct, c1, annualRatePct, termYears
 }
 
 // Same saving phase as traditionalPath (20% down at C1/month), but pays C2/month
-// during the mortgage instead of the standard payment, finishing the loan faster.
+// total during the mortgage phase. Housing costs come out of C2 first, so the
+// actual mortgage payment is (C2 - housingCostsMonthly), finishing faster than
+// the standard 30-year term. Total paid is exactly C2/month — no extra on top.
 // Returns { monthsToSaveDown, monthsToPayoff, totalMonths, totalPaid }.
 function traditionalAcceleratedPath(homePrice, c1, c2, annualRatePct, termYears, fundYieldPct = 0, housingCostsMonthly = 0) {
-  const downPayment   = homePrice * 0.20;
-  const loanPrincipal = homePrice - downPayment;
-  const r             = fundYieldPct / 100 / 12;
-  const mr            = annualRatePct / 100 / 12;
+  const downPayment      = homePrice * 0.20;
+  const loanPrincipal    = homePrice - downPayment;
+  const r                = fundYieldPct / 100 / 12;
+  const mr               = annualRatePct / 100 / 12;
+  const mortgagePayment  = c2 - housingCostsMonthly;
 
   let monthsToSaveDown;
   if (r === 0) {
@@ -90,19 +93,19 @@ function traditionalAcceleratedPath(homePrice, c1, c2, annualRatePct, termYears,
   if (loanPrincipal <= 0) {
     monthsToPayoff = 0;
   } else if (mr === 0) {
-    monthsToPayoff = Math.ceil(loanPrincipal / c2);
-  } else if (c2 <= mr * loanPrincipal) {
-    // Payment doesn't cover first month's interest — fall back to standard term.
+    monthsToPayoff = Math.ceil(loanPrincipal / mortgagePayment);
+  } else if (mortgagePayment <= mr * loanPrincipal) {
+    // Mortgage payment doesn't cover first month's interest — fall back to standard term.
     monthsToPayoff = termYears * 12;
   } else {
-    monthsToPayoff = Math.ceil(Math.log(c2 / (c2 - mr * loanPrincipal)) / Math.log(1 + mr));
+    monthsToPayoff = Math.ceil(Math.log(mortgagePayment / (mortgagePayment - mr * loanPrincipal)) / Math.log(1 + mr));
   }
 
   return {
     monthsToSaveDown,
     monthsToPayoff,
     totalMonths: monthsToSaveDown + monthsToPayoff,
-    totalPaid: monthsToSaveDown * c1 + monthsToPayoff * (c2 + housingCostsMonthly),
+    totalPaid: monthsToSaveDown * c1 + monthsToPayoff * c2,
   };
 }
 
