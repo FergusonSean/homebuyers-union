@@ -225,9 +225,9 @@ function calculateGroup(inputs, sequentialCount = 0) {
       if (month >= MAX_MONTHS) {
         return { error: "Simulation exceeded 1200 months. Try different inputs.", positions: null, totalMonths: null, traditional: null, ledger: null };
       }
-      for (let i = 0; i < N; i++) totalPaid[i] += i < k ? c2 + housingCostsMonthly : c1;
+      for (let i = 0; i < N; i++) totalPaid[i] += i < k ? c2 : c1;
       const fundInterestEarned = savingFund * fundR;
-      savingFund += savingC2 + savingC1 + monthlyDonorContrib + fundInterestEarned;
+      savingFund += savingC2 + savingC1 + monthlyDonorContrib + fundInterestEarned - k * housingCostsMonthly;
       month++;
       ledger.push({
         month,
@@ -254,7 +254,7 @@ function calculateGroup(inputs, sequentialCount = 0) {
     // Payoff sub-phase: k+1 members housed; ALL income → this mortgage.
     const payoffC2     = (k + 1) * c2;
     const payoffC1     = (N - k - 1) * c1;
-    const payoffIncome = payoffC2 + payoffC1 + monthlyDonorContrib;
+    const payoffIncome = payoffC2 + payoffC1 + monthlyDonorContrib - (k + 1) * housingCostsMonthly;
 
     let mortgageBalance = Math.max(0, loanPrincipal - savingFund);
     if (savingFund > loanPrincipal) carryover = savingFund - loanPrincipal;
@@ -263,7 +263,7 @@ function calculateGroup(inputs, sequentialCount = 0) {
       if (month >= MAX_MONTHS) {
         return { error: "Simulation exceeded 1200 months. Try different inputs.", positions: null, totalMonths: null, traditional: null, ledger: null };
       }
-      for (let i = 0; i < N; i++) totalPaid[i] += i <= k ? c2 + housingCostsMonthly : c1;
+      for (let i = 0; i < N; i++) totalPaid[i] += i <= k ? c2 : c1;
 
       const balanceBefore   = mortgageBalance;
       const interestCharged = balanceBefore * r;
@@ -315,11 +315,11 @@ function calculateGroup(inputs, sequentialCount = 0) {
     const fundInterestEarned = fundBalance * fundR;
     const totalIncome        = c2Income + c1Income + monthlyDonorContrib + fundInterestEarned;
     const totalObligations   = mortgageCount * mortgagePaymentStd;
-    const netGrowth          = totalIncome - totalObligations;
+    const netGrowth          = totalIncome - totalObligations - postHouseMembers * housingCostsMonthly;
     const fundBalanceStart   = fundBalance;
 
     for (let k = 0; k < N; k++) {
-      totalPaid[k] += housedAtMonth[k] !== null ? c2 + housingCostsMonthly : c1;
+      totalPaid[k] += housedAtMonth[k] !== null ? c2 : c1;
     }
 
     fundBalance += netGrowth;
@@ -388,10 +388,10 @@ function calculateGroup(inputs, sequentialCount = 0) {
     const activeMortgages  = balances.filter(b => b > 0).length;
     const totalIncome      = N * c2 + monthlyDonorContrib;
     const totalObligations = activeMortgages * mortgagePaymentStd;
-    const surplus          = Math.max(0, totalIncome - totalObligations);
+    const surplus          = Math.max(0, totalIncome - N * housingCostsMonthly - totalObligations);
 
     for (let k = 0; k < N; k++) {
-      totalPaid[k] += c2 + housingCostsMonthly;
+      totalPaid[k] += c2;
     }
 
     month++;
@@ -558,10 +558,10 @@ function calculateGroupSequential(inputs) {
       }
 
       for (let i = 0; i < N; i++) {
-        totalPaid[i] += i < k ? c2 + housingCostsMonthly : c1;
+        totalPaid[i] += i < k ? c2 : c1;
       }
       const fundInterestEarned = fundBalance * fundR;
-      fundBalance += savingIncome + fundInterestEarned;
+      fundBalance += savingIncome + fundInterestEarned - k * housingCostsMonthly;
       month++;
 
       ledger.push({
@@ -595,7 +595,7 @@ function calculateGroupSequential(inputs) {
     // ALL monthly income goes toward paying off this mortgage.
     const payoffC2     = (k + 1) * c2;
     const payoffC1     = (N - k - 1) * c1;
-    const payoffIncome = payoffC2 + payoffC1 + monthlyDonorContrib;
+    const payoffIncome = payoffC2 + payoffC1 + monthlyDonorContrib - (k + 1) * housingCostsMonthly;
 
     // The saving-phase overshoot reduces the starting mortgage balance.
     // If the overshoot fully covers the loan principal (including the 100% down
@@ -611,7 +611,7 @@ function calculateGroupSequential(inputs) {
       }
 
       for (let i = 0; i < N; i++) {
-        totalPaid[i] += i <= k ? c2 + housingCostsMonthly : c1;
+        totalPaid[i] += i <= k ? c2 : c1;
       }
 
       const balanceBefore    = mortgageBalance;
