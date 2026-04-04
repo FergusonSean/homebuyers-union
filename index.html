@@ -556,16 +556,24 @@
         }).join("");
       }
 
-      const tradTotal     = tradResult.totalMonths;
-      const tradTotalPaid = tradResult.positions.reduce((s, p) => s + p.totalPaid, 0);
-      const tradPersonMonths = tradResult.positions.reduce((s, p) => s + p.monthsHoused, 0);
+      const tradTotal        = tradResult.totalMonths;
+      const tradTotalPaid    = tradResult.positions.reduce((s, p) => s + p.totalPaid, 0);
+      // Normalize cost/mo housed across models by extending shorter simulations
+      // to the longest duration, charging only housing costs for the extra months.
+      const housingCostsMonthly = inputs.homePrice * ((inputs.propertyTaxPct || 0) / 100 + 0.01) / 12 + (inputs.insuranceMonthly || 0);
+      const maxTotalMonths   = Math.max(...allModelsWithTrad.map(m => m.result.totalMonths));
       const totalRow  = `<tr class="tbl-total"><td class="tbl-pos"><em>Group total</em></td>${
         allModelsWithTrad.map(m => {
           const v            = m.result.totalMonths;
           const groupPaid    = m.result.positions.reduce((s, p) => s + p.totalPaid, 0);
           const personMonths = m.result.positions.reduce((s, p) => s + p.monthsHoused, 0);
-          const costPerPM    = personMonths > 0 ? Math.round(groupPaid / personMonths) : 0;
-          const tradCostPerPM = tradPersonMonths > 0 ? Math.round(tradTotalPaid / tradPersonMonths) : 0;
+          const extraMonths  = maxTotalMonths - v;
+          const normPaid     = groupPaid + extraMonths * N * housingCostsMonthly;
+          const normPM       = personMonths + extraMonths * N;
+          const costPerPM    = normPM > 0 ? Math.round(normPaid / normPM) : 0;
+          const tradNormPaid = tradTotalPaid + (maxTotalMonths - tradTotal) * N * housingCostsMonthly;
+          const tradNormPM   = tradResult.positions.reduce((s, p) => s + p.monthsHoused, 0) + (maxTotalMonths - tradTotal) * N;
+          const tradCostPerPM = tradNormPM > 0 ? Math.round(tradNormPaid / tradNormPM) : 0;
           const mCls = m.type === "traditional" ? ""
                      : v < tradTotal ? "cmp-better" : v > tradTotal ? "cmp-worse" : "";
           const pCls = m.type === "traditional" ? ""
