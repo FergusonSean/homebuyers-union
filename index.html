@@ -168,11 +168,10 @@
             </div>
           </fieldset>
 
-          <button class="btn btn--primary calc-submit" type="submit">Calculate</button>
         </form>
 
         <div class="calc-results" id="calc-results" aria-live="polite">
-          <p class="calc-results__placeholder">Fill in the inputs and press Calculate to see results.</p>
+          <p class="calc-results__placeholder">Adjust the inputs above to see results.</p>
         </div>
       </div>
 
@@ -682,9 +681,7 @@
       `;
     }
 
-    document.getElementById("calc-form").addEventListener("submit", function (e) {
-      e.preventDefault();
-
+    function runCalculation() {
       const inputs = {
         homePrice: parseFloat(document.getElementById("homePrice").value),
         groupSize: parseInt(document.getElementById("groupSize").value),
@@ -717,7 +714,10 @@
       }
 
       renderComparison(models, inputs);
-    });
+    }
+
+    document.getElementById("calc-form").addEventListener("input", runCalculation);
+    runCalculation();
   </script>
 
 </body>

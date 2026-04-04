@@ -419,11 +419,6 @@ a.nav__wordmark:hover {
   box-shadow: 0 0 0 2px rgba(139, 26, 26, 0.12);
 }
 
-.calc-submit {
-  grid-column: 1 / -1;
-  justify-self: start;
-}
-
 .calc-results {
   min-height: 120px;
 }
