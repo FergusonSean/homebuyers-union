@@ -240,6 +240,7 @@ function calculateGroup(inputs, sequentialCount = 0) {
         donorIncome:    monthlyDonorContrib,
         fundInterestEarned,
         totalIncome:    savingC2 + savingC1 + monthlyDonorContrib + fundInterestEarned,
+        housingCosts:   k * housingCostsMonthly,
         fundBalance:    savingFund,
         downPaymentTarget,
         housePurchased: savingFund >= downPaymentTarget,
@@ -252,9 +253,11 @@ function calculateGroup(inputs, sequentialCount = 0) {
     housedAtMonth[k] = month;
 
     // Payoff sub-phase: k+1 members housed; ALL income → this mortgage.
-    const payoffC2     = (k + 1) * c2;
-    const payoffC1     = (N - k - 1) * c1;
-    const payoffIncome = payoffC2 + payoffC1 + monthlyDonorContrib - (k + 1) * housingCostsMonthly;
+    const payoffC2           = (k + 1) * c2;
+    const payoffC1           = (N - k - 1) * c1;
+    const payoffHousingCosts = (k + 1) * housingCostsMonthly;
+    const payoffGrossIncome  = payoffC2 + payoffC1 + monthlyDonorContrib;
+    const payoffIncome       = payoffGrossIncome - payoffHousingCosts;
 
     let mortgageBalance = Math.max(0, loanPrincipal - savingFund);
     if (savingFund > loanPrincipal) carryover = savingFund - loanPrincipal;
@@ -285,7 +288,8 @@ function calculateGroup(inputs, sequentialCount = 0) {
         c2Income:       payoffC2,
         c1Income:       payoffC1,
         donorIncome:    monthlyDonorContrib,
-        totalIncome:    payoffIncome,
+        totalIncome:    payoffGrossIncome,
+        housingCosts:   payoffHousingCosts,
         fundBalance: null, downPaymentTarget: null, housePurchased: null,
         mortgageBalanceBefore: balanceBefore,
         interestCharged,
@@ -351,6 +355,7 @@ function calculateGroup(inputs, sequentialCount = 0) {
       donorIncome:          monthlyDonorContrib,
       fundInterestEarned,
       totalIncome,
+      housingCosts:         postHouseMembers * housingCostsMonthly,
       activeMortgages:      mortgageCount,
       mortgagePaymentStd,
       totalObligations,
@@ -435,6 +440,7 @@ function calculateGroup(inputs, sequentialCount = 0) {
       donorIncome: monthlyDonorContrib,
       fundInterestEarned: 0,
       totalIncome,
+      housingCosts: N * housingCostsMonthly,
       activeMortgages,
       mortgagePaymentStd,
       totalObligations,
@@ -575,6 +581,7 @@ function calculateGroupSequential(inputs) {
         donorIncome: monthlyDonorContrib,
         fundInterestEarned,
         totalIncome: savingIncome + fundInterestEarned,
+        housingCosts: k * housingCostsMonthly,
         fundBalance,
         downPaymentTarget,
         housePurchased: fundBalance >= downPaymentTarget,
@@ -593,9 +600,11 @@ function calculateGroupSequential(inputs) {
     // ── Payoff phase ─────────────────────────────────────────────────────
     // k+1 members now housed (C2). Members k+1..N-1 still waiting (C1).
     // ALL monthly income goes toward paying off this mortgage.
-    const payoffC2     = (k + 1) * c2;
-    const payoffC1     = (N - k - 1) * c1;
-    const payoffIncome = payoffC2 + payoffC1 + monthlyDonorContrib - (k + 1) * housingCostsMonthly;
+    const payoffC2           = (k + 1) * c2;
+    const payoffC1           = (N - k - 1) * c1;
+    const payoffHousingCosts = (k + 1) * housingCostsMonthly;
+    const payoffGrossIncome  = payoffC2 + payoffC1 + monthlyDonorContrib;
+    const payoffIncome       = payoffGrossIncome - payoffHousingCosts;
 
     // The saving-phase overshoot reduces the starting mortgage balance.
     // If the overshoot fully covers the loan principal (including the 100% down
@@ -633,7 +642,8 @@ function calculateGroupSequential(inputs) {
         c2Income: payoffC2,
         c1Income: payoffC1,
         donorIncome: monthlyDonorContrib,
-        totalIncome: payoffIncome,
+        totalIncome: payoffGrossIncome,
+        housingCosts: payoffHousingCosts,
         fundBalance: null,
         downPaymentTarget: null,
         housePurchased: null,
