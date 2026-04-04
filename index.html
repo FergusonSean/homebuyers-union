@@ -506,24 +506,19 @@
       // Add traditional and accelerated-traditional columns for comparison.
       // Neither has a ledger so both are excluded from the ledger buttons.
       const trad = models[0].traditional;
-      const tradTotalMonths = trad.monthsToSaveDown + inputs.termYears * 12;
       const tradResult = {
         positions: Array.from({ length: N }, () => ({
-          monthsUntilHoused:  trad.monthsToSaveDown,
-          monthsHoused:       inputs.termYears * 12,
-          totalPaid:          trad.totalPaid,
-          costPerMonthHoused: Math.round(trad.totalPaid / (inputs.termYears * 12)),
+          monthsUntilHoused: trad.monthsToSaveDown,
+          totalPaid:         trad.totalPaid,
         })),
-        totalMonths: tradTotalMonths,
+        totalMonths: trad.monthsToSaveDown + inputs.termYears * 12,
         error: null,
       };
       const accel = trad.accelerated;
       const tradAccelResult = {
         positions: Array.from({ length: N }, () => ({
-          monthsUntilHoused:  accel.monthsToSaveDown,
-          monthsHoused:       accel.monthsToPayoff,
-          totalPaid:          accel.totalPaid,
-          costPerMonthHoused: accel.monthsToPayoff > 0 ? Math.round(accel.totalPaid / accel.monthsToPayoff) : 0,
+          monthsUntilHoused: accel.monthsToSaveDown,
+          totalPaid:         accel.totalPaid,
         })),
         totalMonths: accel.totalMonths,
         error: null,
@@ -536,51 +531,62 @@
 
       const headerCells = allModelsWithTrad.map(m => `<th>${m.label}</th>`).join("");
 
-      // Combined rows: months until housed / total paid / cost per month housed.
+      const WINDOW = 600; // 50 years
+      const housingCostsMonthly = inputs.homePrice * ((inputs.propertyTaxPct || 0) / 100 + 0.01) / 12 + (inputs.insuranceMonthly || 0);
+      const windowLabel = formatMonths(WINDOW); // "50 yr"
+
+      // cost50yr: total paid + housing costs for any months between simulation end and
+      // the 50-year window. After the org dissolves, members pay housing costs out of pocket.
+      function cost50yr(pos, modelTotalMonths) {
+        return pos.totalPaid + Math.max(0, WINDOW - modelTotalMonths) * housingCostsMonthly;
+      }
+      function rate50yr(pos, modelTotalMonths) {
+        const months = WINDOW - pos.monthsUntilHoused;
+        return months > 0 ? Math.round(cost50yr(pos, modelTotalMonths) / months) : 0;
+      }
+
+      // Combined rows: months until housed / total paid / cost per month housed (50yr window).
       // Colors are relative to the Traditional column: green = better, red = worse.
       function tableRows() {
         return Array.from({ length: N }, (_, i) => {
-          const tradPos = tradResult.positions[i];
+          const tradPos  = tradResult.positions[i];
+          const tradRate = rate50yr(tradPos, tradResult.totalMonths);
           const cells = allModelsWithTrad.map(m => {
             const pos    = m.result.positions[i];
             const isTrad = m.type === "traditional";
+            const rate   = rate50yr(pos, m.result.totalMonths);
             const mCls = isTrad ? "" : pos.monthsUntilHoused < tradPos.monthsUntilHoused ? "cmp-better"
                                      : pos.monthsUntilHoused > tradPos.monthsUntilHoused ? "cmp-worse" : "";
             const pCls = isTrad ? "" : pos.totalPaid < tradPos.totalPaid ? "cmp-better"
                                      : pos.totalPaid > tradPos.totalPaid ? "cmp-worse" : "";
-            const rCls = isTrad ? "" : pos.costPerMonthHoused < tradPos.costPerMonthHoused ? "cmp-better"
-                                     : pos.costPerMonthHoused > tradPos.costPerMonthHoused ? "cmp-worse" : "";
-            return `<td><span class="${mCls}">${formatMonths(pos.monthsUntilHoused)}</span><span class="ledger-sub ${pCls}">${formatDollars(pos.totalPaid)}</span><span class="ledger-sub ${rCls}">${formatDollars(pos.costPerMonthHoused)}/mo housed</span></td>`;
+            const rCls = isTrad ? "" : rate < tradRate ? "cmp-better" : rate > tradRate ? "cmp-worse" : "";
+            return `<td><span class="${mCls}">${formatMonths(pos.monthsUntilHoused)}</span><span class="ledger-sub ${pCls}">${formatDollars(pos.totalPaid)}</span><span class="ledger-sub ${rCls}">${formatDollars(rate)}/mo housed (${windowLabel})</span></td>`;
           }).join("");
           return `<tr><td class="tbl-pos">Position ${i + 1}</td>${cells}</tr>`;
         }).join("");
       }
 
-      const tradTotal        = tradResult.totalMonths;
-      const tradTotalPaid    = tradResult.positions.reduce((s, p) => s + p.totalPaid, 0);
-      // Normalize cost/mo housed across models by extending shorter simulations
-      // to the longest duration, charging only housing costs for the extra months.
-      const housingCostsMonthly = inputs.homePrice * ((inputs.propertyTaxPct || 0) / 100 + 0.01) / 12 + (inputs.insuranceMonthly || 0);
-      const maxTotalMonths   = Math.max(...allModelsWithTrad.map(m => m.result.totalMonths));
+      const tradTotal     = tradResult.totalMonths;
+      const tradTotalPaid = tradResult.positions.reduce((s, p) => s + p.totalPaid, 0);
+      const tradGroupRate = (() => {
+        const paid = tradTotalPaid + Math.max(0, WINDOW - tradTotal) * N * housingCostsMonthly;
+        const pm   = tradResult.positions.reduce((s, p) => s + (WINDOW - p.monthsUntilHoused), 0);
+        return pm > 0 ? Math.round(paid / pm) : 0;
+      })();
       const totalRow  = `<tr class="tbl-total"><td class="tbl-pos"><em>Group total</em></td>${
         allModelsWithTrad.map(m => {
-          const v            = m.result.totalMonths;
-          const groupPaid    = m.result.positions.reduce((s, p) => s + p.totalPaid, 0);
-          const personMonths = m.result.positions.reduce((s, p) => s + p.monthsHoused, 0);
-          const extraMonths  = maxTotalMonths - v;
-          const normPaid     = groupPaid + extraMonths * N * housingCostsMonthly;
-          const normPM       = personMonths + extraMonths * N;
-          const costPerPM    = normPM > 0 ? Math.round(normPaid / normPM) : 0;
-          const tradNormPaid = tradTotalPaid + (maxTotalMonths - tradTotal) * N * housingCostsMonthly;
-          const tradNormPM   = tradResult.positions.reduce((s, p) => s + p.monthsHoused, 0) + (maxTotalMonths - tradTotal) * N;
-          const tradCostPerPM = tradNormPM > 0 ? Math.round(tradNormPaid / tradNormPM) : 0;
+          const v         = m.result.totalMonths;
+          const groupPaid = m.result.positions.reduce((s, p) => s + p.totalPaid, 0);
+          const paid50    = groupPaid + Math.max(0, WINDOW - v) * N * housingCostsMonthly;
+          const pm50      = m.result.positions.reduce((s, p) => s + (WINDOW - p.monthsUntilHoused), 0);
+          const rate      = pm50 > 0 ? Math.round(paid50 / pm50) : 0;
           const mCls = m.type === "traditional" ? ""
                      : v < tradTotal ? "cmp-better" : v > tradTotal ? "cmp-worse" : "";
           const pCls = m.type === "traditional" ? ""
                      : groupPaid < tradTotalPaid ? "cmp-better" : groupPaid > tradTotalPaid ? "cmp-worse" : "";
           const rCls = m.type === "traditional" ? ""
-                     : costPerPM < tradCostPerPM ? "cmp-better" : costPerPM > tradCostPerPM ? "cmp-worse" : "";
-          return `<td><span class="${mCls}">${formatMonths(v)}</span><span class="ledger-sub ${pCls}">${formatDollars(groupPaid)}</span><span class="ledger-sub ${rCls}">${formatDollars(costPerPM)}/mo housed</span></td>`;
+                     : rate < tradGroupRate ? "cmp-better" : rate > tradGroupRate ? "cmp-worse" : "";
+          return `<td><span class="${mCls}">${formatMonths(v)}</span><span class="ledger-sub ${pCls}">${formatDollars(groupPaid)}</span><span class="ledger-sub ${rCls}">${formatDollars(rate)}/mo housed (${windowLabel})</span></td>`;
         }).join("")
       }</tr>`;
 
@@ -591,7 +597,7 @@
           "Seq. K" means the first K mortgages are paid off completely before switching to parallel for the rest.
           "Trad. (pay C2)" is the traditional path but paying your post-move-in amount each month instead of the standard payment.
         </p>
-        <p class="calc-note" style="font-size:0.75rem;margin-bottom:1rem">Each cell: months until housed / total paid lifetime / avg cost per month housed</p>
+        <p class="calc-note" style="font-size:0.75rem;margin-bottom:1rem">Each cell: months until housed / total paid / cost per month housed (first ${windowLabel})</p>
 
         <div class="tbl-wrapper">
           <table class="results-table">

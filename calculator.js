@@ -500,14 +500,11 @@ function calculateGroup(inputs, sequentialCount = 0) {
   const tradAccel   = traditionalAcceleratedPath(homePrice, c1, c2, annualRatePct, termYears, fundYieldPct, housingCostsMonthly);
 
   const positions = housedAtMonth.map((housedMonth, k) => {
-    const paid         = Math.round(totalPaid[k]);
-    const monthsHoused = totalMonths - housedMonth;
+    const paid = Math.round(totalPaid[k]);
     return {
       position: k + 1,
       monthsUntilHoused: housedMonth,
-      monthsHoused,
       totalPaid: paid,
-      costPerMonthHoused: monthsHoused > 0 ? Math.round(paid / monthsHoused) : 0,
       savedVsTraditional: Math.round(trad.totalPaid - paid),
     };
   });
@@ -718,14 +715,11 @@ function calculateGroupSequential(inputs) {
   const tradAccel   = traditionalAcceleratedPath(homePrice, c1, c2, annualRatePct, termYears, fundYieldPct, housingCostsMonthly);
 
   const positions = housedAtMonth.map((housedMonth, k) => {
-    const paid         = Math.round(totalPaid[k]);
-    const monthsHoused = totalMonths - housedMonth;
+    const paid = Math.round(totalPaid[k]);
     return {
       position: k + 1,
       monthsUntilHoused: housedMonth,
-      monthsHoused,
       totalPaid: paid,
-      costPerMonthHoused: monthsHoused > 0 ? Math.round(paid / monthsHoused) : 0,
       savedVsTraditional: Math.round(trad.totalPaid - paid),
     };
   });
