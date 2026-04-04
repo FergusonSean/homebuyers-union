@@ -503,8 +503,8 @@
         k,
       })).filter(m => !m.result.error && m.k !== N - 1);
 
-      // Add traditional mortgage as the final column so it participates in
-      // green/red coloring. It has no ledger so it is excluded from buttons.
+      // Add traditional and accelerated-traditional columns for comparison.
+      // Neither has a ledger so both are excluded from the ledger buttons.
       const trad = models[0].traditional;
       const tradResult = {
         positions: Array.from({ length: N }, () => ({
@@ -514,9 +514,19 @@
         totalMonths: trad.monthsToSaveDown + inputs.termYears * 12,
         error: null,
       };
+      const accel = trad.accelerated;
+      const tradAccelResult = {
+        positions: Array.from({ length: N }, () => ({
+          monthsUntilHoused: accel.monthsToSaveDown,
+          totalPaid:         accel.totalPaid,
+        })),
+        totalMonths: accel.totalMonths,
+        error: null,
+      };
       const allModelsWithTrad = [
         ...allModels,
-        { key: "traditional", label: "Traditional", result: tradResult, type: "traditional" },
+        { key: "traditional",       label: "Traditional",    result: tradResult,      type: "traditional" },
+        { key: "traditional-accel", label: "Trad. (pay C2)", result: tradAccelResult, type: "traditional" },
       ];
 
       const headerCells = allModelsWithTrad.map(m => `<th>${m.label}</th>`).join("");
@@ -560,6 +570,7 @@
           <span class="cmp-better-key">Green</span> = better than traditional.
           <span class="cmp-worse-key">Red</span> = worse than traditional.
           "Seq. K" means the first K mortgages are paid off completely before switching to parallel for the rest.
+          "Trad. (pay C2)" is the traditional path but paying your post-move-in amount each month instead of the standard payment.
         </p>
         <p class="calc-note" style="font-size:0.75rem;margin-bottom:1rem">Each cell: months until housed / total paid lifetime</p>
 

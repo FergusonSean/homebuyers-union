@@ -70,6 +70,42 @@ function traditionalPath(homePrice, downPaymentPct, c1, annualRatePct, termYears
   };
 }
 
+// Same saving phase as traditionalPath (20% down at C1/month), but pays C2/month
+// during the mortgage instead of the standard payment, finishing the loan faster.
+// Returns { monthsToSaveDown, monthsToPayoff, totalMonths, totalPaid }.
+function traditionalAcceleratedPath(homePrice, c1, c2, annualRatePct, termYears, fundYieldPct = 0, housingCostsMonthly = 0) {
+  const downPayment   = homePrice * 0.20;
+  const loanPrincipal = homePrice - downPayment;
+  const r             = fundYieldPct / 100 / 12;
+  const mr            = annualRatePct / 100 / 12;
+
+  let monthsToSaveDown;
+  if (r === 0) {
+    monthsToSaveDown = Math.ceil(downPayment / c1);
+  } else {
+    monthsToSaveDown = Math.ceil(Math.log(1 + downPayment * r / c1) / Math.log(1 + r));
+  }
+
+  let monthsToPayoff;
+  if (loanPrincipal <= 0) {
+    monthsToPayoff = 0;
+  } else if (mr === 0) {
+    monthsToPayoff = Math.ceil(loanPrincipal / c2);
+  } else if (c2 <= mr * loanPrincipal) {
+    // Payment doesn't cover first month's interest — fall back to standard term.
+    monthsToPayoff = termYears * 12;
+  } else {
+    monthsToPayoff = Math.ceil(Math.log(c2 / (c2 - mr * loanPrincipal)) / Math.log(1 + mr));
+  }
+
+  return {
+    monthsToSaveDown,
+    monthsToPayoff,
+    totalMonths: monthsToSaveDown + monthsToPayoff,
+    totalPaid: monthsToSaveDown * c1 + monthsToPayoff * (c2 + housingCostsMonthly),
+  };
+}
+
 // ─── Extra-payment helper ─────────────────────────────────────────────────────
 
 // Applies an extra lump-sum payment toward the mortgage with the highest
@@ -458,6 +494,7 @@ function calculateGroup(inputs, sequentialCount = 0) {
   const totalMonths = month;
   // Traditional path always uses 20% down for a fair apples-to-apples baseline.
   const trad        = traditionalPath(homePrice, 0.20, c1, annualRatePct, termYears, fundYieldPct, housingCostsMonthly);
+  const tradAccel   = traditionalAcceleratedPath(homePrice, c1, c2, annualRatePct, termYears, fundYieldPct, housingCostsMonthly);
 
   const positions = housedAtMonth.map((housedMonth, k) => ({
     position: k + 1,
@@ -472,6 +509,12 @@ function calculateGroup(inputs, sequentialCount = 0) {
     traditional: {
       monthsToSaveDown: trad.monthsToSaveDown,
       totalPaid: Math.round(trad.totalPaid),
+      accelerated: {
+        monthsToSaveDown: tradAccel.monthsToSaveDown,
+        monthsToPayoff: tradAccel.monthsToPayoff,
+        totalMonths: tradAccel.totalMonths,
+        totalPaid: Math.round(tradAccel.totalPaid),
+      },
     },
     ledger,
     sequentialCount,
@@ -663,6 +706,7 @@ function calculateGroupSequential(inputs) {
   const totalMonths = month;
   // Traditional path always uses 20% down for a fair apples-to-apples baseline.
   const trad        = traditionalPath(homePrice, 0.20, c1, annualRatePct, termYears, fundYieldPct, housingCostsMonthly);
+  const tradAccel   = traditionalAcceleratedPath(homePrice, c1, c2, annualRatePct, termYears, fundYieldPct, housingCostsMonthly);
 
   const positions = housedAtMonth.map((housedMonth, k) => ({
     position: k + 1,
@@ -677,6 +721,12 @@ function calculateGroupSequential(inputs) {
     traditional: {
       monthsToSaveDown: trad.monthsToSaveDown,
       totalPaid: Math.round(trad.totalPaid),
+      accelerated: {
+        monthsToSaveDown: tradAccel.monthsToSaveDown,
+        monthsToPayoff: tradAccel.monthsToPayoff,
+        totalMonths: tradAccel.totalMonths,
+        totalPaid: Math.round(tradAccel.totalPaid),
+      },
     },
     ledger,
     error: null,
@@ -687,7 +737,7 @@ function calculateGroupSequential(inputs) {
 
 // Support both CommonJS (for tests) and browser global.
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { calculateGroup, calculateGroupSequential, monthlyMortgagePayment, traditionalPath };
+  module.exports = { calculateGroup, calculateGroupSequential, monthlyMortgagePayment, traditionalPath, traditionalAcceleratedPath };
 } else {
   window.calculateGroup           = calculateGroup;
   window.calculateGroupSequential = calculateGroupSequential;
