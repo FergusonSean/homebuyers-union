@@ -443,7 +443,8 @@ function calculateGroup(inputs, sequentialCount = 0) {
   }
 
   const totalMonths = month;
-  const trad        = traditionalPath(homePrice, downPaymentPct, c1, annualRatePct, termYears, fundYieldPct);
+  // Traditional path always uses 20% down for a fair apples-to-apples baseline.
+  const trad        = traditionalPath(homePrice, 0.20, c1, annualRatePct, termYears, fundYieldPct);
 
   const positions = housedAtMonth.map((housedMonth, k) => ({
     position: k + 1,
@@ -639,7 +640,8 @@ function calculateGroupSequential(inputs) {
   }
 
   const totalMonths = month;
-  const trad        = traditionalPath(homePrice, downPaymentPct, c1, annualRatePct, termYears, fundYieldPct);
+  // Traditional path always uses 20% down for a fair apples-to-apples baseline.
+  const trad        = traditionalPath(homePrice, 0.20, c1, annualRatePct, termYears, fundYieldPct);
 
   const positions = housedAtMonth.map((housedMonth, k) => ({
     position: k + 1,
