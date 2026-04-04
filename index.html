@@ -134,6 +134,14 @@
               <label class="calc-label" for="termYears">Mortgage term (years)</label>
               <input class="calc-input" type="number" id="termYears" name="termYears" min="10" max="40" step="1" value="30">
             </div>
+            <div class="calc-field">
+              <label class="calc-label" for="propertyTaxPct">Property tax (% of home/yr)</label>
+              <input class="calc-input" type="number" id="propertyTaxPct" name="propertyTaxPct" min="0" max="5" step="0.05" value="1.1">
+            </div>
+            <div class="calc-field">
+              <label class="calc-label" for="insuranceMonthly">Home insurance ($/mo)</label>
+              <input class="calc-input" type="number" id="insuranceMonthly" name="insuranceMonthly" min="0" max="5000" step="10" value="150">
+            </div>
           </fieldset>
 
           <fieldset class="calc-fieldset">
@@ -687,6 +695,8 @@
         termYears: parseInt(document.getElementById("termYears").value),
         monthlyDonorContrib: parseFloat(document.getElementById("monthlyDonorContrib").value) || 0,
         fundYieldPct: parseFloat(document.getElementById("fundYieldPct").value) || 0,
+        propertyTaxPct: parseFloat(document.getElementById("propertyTaxPct").value) || 0,
+        insuranceMonthly: parseFloat(document.getElementById("insuranceMonthly").value) || 0,
       };
 
       if (inputs.c2 <= 0 || inputs.c1 <= 0) {
