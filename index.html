@@ -527,14 +527,19 @@
         }).join("");
       }
 
-      const tradTotal = tradResult.totalMonths;
+      const tradTotal    = tradResult.totalMonths;
+      const tradTotalPaid = tradResult.positions.reduce((s, p) => s + p.totalPaid, 0);
       const totalRow  = `<tr class="tbl-total"><td class="tbl-pos"><em>Group total</em></td>${
         allModelsWithTrad.map(m => {
-          const v   = m.result.totalMonths;
-          const cls = m.type === "traditional" ? ""
-                    : v < tradTotal ? "cmp-better"
-                    : v > tradTotal ? "cmp-worse" : "";
-          return `<td class="${cls}">${formatMonths(v)}</td>`;
+          const v         = m.result.totalMonths;
+          const groupPaid = m.result.positions.reduce((s, p) => s + p.totalPaid, 0);
+          const mCls = m.type === "traditional" ? ""
+                     : v < tradTotal ? "cmp-better"
+                     : v > tradTotal ? "cmp-worse" : "";
+          const pCls = m.type === "traditional" ? ""
+                     : groupPaid < tradTotalPaid ? "cmp-better"
+                     : groupPaid > tradTotalPaid ? "cmp-worse" : "";
+          return `<td><span class="${mCls}">${formatMonths(v)}</span><span class="ledger-sub ${pCls}">${formatDollars(groupPaid)}</span></td>`;
         }).join("")
       }</tr>`;
 
