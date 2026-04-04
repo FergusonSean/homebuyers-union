@@ -488,7 +488,8 @@
         label:  k === 0 ? "Parallel" : k === N ? "Sequential" : `Seq. ${k}`,
         result: r,
         type:   k === 0 ? "parallel" : k === N ? "sequential" : "hybrid",
-      })).filter(m => !m.result.error);
+        k,
+      })).filter(m => !m.result.error && m.k !== N - 1);
 
       // Add traditional mortgage as the final column so it participates in
       // green/red coloring. It has no ledger so it is excluded from buttons.
