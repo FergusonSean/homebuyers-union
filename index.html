@@ -560,7 +560,7 @@
             const pCls = isTrad ? "" : pos.totalPaid < tradPos.totalPaid ? "cmp-better"
                                      : pos.totalPaid > tradPos.totalPaid ? "cmp-worse" : "";
             const rCls = isTrad ? "" : rate < tradRate ? "cmp-better" : rate > tradRate ? "cmp-worse" : "";
-            return `<td><span class="${mCls}">${formatMonths(pos.monthsUntilHoused)}</span><span class="ledger-sub ${pCls}">${formatDollars(pos.totalPaid)}</span><span class="ledger-sub ${rCls}">${formatDollars(rate)}/mo housed (${windowLabel})</span></td>`;
+            return `<td><span class="${mCls}">${formatMonths(pos.monthsUntilHoused)}</span><span class="ledger-sub ${pCls}">${formatDollars(pos.totalPaid)}</span><span class="ledger-sub ${rCls}">${formatDollars(rate)}/mo housed (first ${windowLabel})</span></td>`;
           }).join("");
           return `<tr><td class="tbl-pos">Position ${i + 1}</td>${cells}</tr>`;
         }).join("");
@@ -586,7 +586,7 @@
                      : groupPaid < tradTotalPaid ? "cmp-better" : groupPaid > tradTotalPaid ? "cmp-worse" : "";
           const rCls = m.type === "traditional" ? ""
                      : rate < tradGroupRate ? "cmp-better" : rate > tradGroupRate ? "cmp-worse" : "";
-          return `<td><span class="${mCls}">${formatMonths(v)}</span><span class="ledger-sub ${pCls}">${formatDollars(groupPaid)}</span><span class="ledger-sub ${rCls}">${formatDollars(rate)}/mo housed (${windowLabel})</span></td>`;
+          return `<td><span class="${mCls}">${formatMonths(v)}</span><span class="ledger-sub ${pCls}">${formatDollars(groupPaid)}</span><span class="ledger-sub ${rCls}">${formatDollars(rate)}/mo housed (first ${windowLabel})</span></td>`;
         }).join("")
       }</tr>`;
 
