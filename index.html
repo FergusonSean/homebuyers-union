@@ -526,7 +526,7 @@
       const allModelsWithTrad = [
         ...allModels,
         { key: "traditional",       label: "Traditional",    result: tradResult,      type: "traditional" },
-        { key: "traditional-accel", label: "Trad. (pay C2)", result: tradAccelResult, type: "traditional" },
+        { key: "traditional-accel", label: "Traditional (same payments)", result: tradAccelResult, type: "traditional" },
       ];
 
       const headerCells = allModelsWithTrad.map(m => `<th>${m.label}</th>`).join("");
@@ -595,7 +595,7 @@
           <span class="cmp-better-key">Green</span> = better than traditional.
           <span class="cmp-worse-key">Red</span> = worse than traditional.
           "Seq. K" means the first K mortgages are paid off completely before switching to parallel for the rest.
-          "Trad. (pay C2)" is the traditional path but paying your post-move-in amount each month instead of the standard payment.
+          "Traditional (same payments)" is the traditional path but paying your post-move-in amount each month instead of the standard payment.
         </p>
         <p class="calc-note" style="font-size:0.75rem;margin-bottom:1rem">Each cell: months until housed / total paid / cost per month housed (first ${windowLabel})</p>
 
