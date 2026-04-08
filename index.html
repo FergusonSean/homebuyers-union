@@ -659,23 +659,27 @@
       const sections = Object.keys(cycles).map(houseIdx => {
         const rows = cycles[houseIdx].map(e => {
           if (e.phase === 'saving') {
-            const progress    = `${formatDollars(e.fundBalance)} / ${formatDollars(downPaymentTarget)}`;
-            const housingLine = e.housingCosts > 0
-              ? `<span class="ledger-sub">&minus;${formatDollars(e.housingCosts)} tax/ins/maint</span>` : "";
+            const progress       = `${formatDollars(e.fundBalance)} / ${formatDollars(downPaymentTarget)}`;
+            const effectiveIncome = e.totalIncome - e.housingCosts;
+            const housingLine    = e.housingCosts > 0
+              ? `<span class="ledger-sub">${incomeFormula(e)}</span><span class="ledger-sub">&minus;${formatDollars(e.housingCosts)} tax/ins/maint</span>`
+              : `<span class="ledger-sub">${incomeFormula(e)}</span>`;
             const event = e.housePurchased
               ? `<strong class="ledger-event">Purchased — ${formatDollars(downPaymentTarget)} withdrawn</strong>`
               : "";
             return `<tr${e.housePurchased ? ' class="ledger-purchase-row"' : ''}>
               <td class="ledger-month">${e.month}</td>
               <td class="ledger-phase">saving</td>
-              <td class="ledger-num">${formatDollars(e.totalIncome)}<span class="ledger-sub">${incomeFormula(e)}</span>${housingLine}</td>
+              <td class="ledger-num">${formatDollars(effectiveIncome)}${housingLine}</td>
               <td class="ledger-balance">${progress}</td>
               <td class="ledger-na">—</td>
               <td>${event}</td>
             </tr>`;
           } else {
-            const housingLine = e.housingCosts > 0
-              ? `<span class="ledger-sub">&minus;${formatDollars(e.housingCosts)} tax/ins/maint</span>` : "";
+            const effectiveIncome = e.totalIncome - e.housingCosts;
+            const housingLine    = e.housingCosts > 0
+              ? `<span class="ledger-sub">${incomeFormula(e)}</span><span class="ledger-sub">&minus;${formatDollars(e.housingCosts)} tax/ins/maint</span>`
+              : `<span class="ledger-sub">${incomeFormula(e)}</span>`;
             const mortgageDetail = `interest ${formatDollars(e.interestCharged)} + principal ${formatDollars(e.principalPaid)}` +
               (e.overpayment > 0 ? ` + <span class="ledger-extra">${formatDollars(e.overpayment)} surplus</span>` : "");
             const mortgageCell = `${formatDollars(e.mortgageBalanceBefore)} &rarr; ${formatDollars(e.mortgageBalanceAfter)}<span class="ledger-sub">${mortgageDetail}</span>`;
@@ -686,7 +690,7 @@
             return `<tr${e.mortgageBalanceAfter === 0 ? ' class="ledger-purchase-row"' : ''}>
               <td class="ledger-month">${e.month}</td>
               <td class="ledger-phase">payoff</td>
-              <td class="ledger-num">${formatDollars(e.totalIncome)}<span class="ledger-sub">${incomeFormula(e)}</span>${housingLine}</td>
+              <td class="ledger-num">${formatDollars(effectiveIncome)}${housingLine}</td>
               <td class="ledger-na">—</td>
               <td class="ledger-balance">${mortgageCell}</td>
               <td>${notes}</td>
