@@ -372,7 +372,7 @@
         return `<tr${e.housePurchased ? ' class="ledger-purchase-row"' : ''}>
           <td class="ledger-month">${e.month}</td>
           <td class="ledger-housed">${e.postHouseMembers} in / ${e.preHouseMembers} waiting</td>
-          <td class="ledger-num">${formatDollars(e.totalIncome)}<span class="ledger-sub">${incomeFormula(e)}</span>${housingLine}</td>
+          <td class="ledger-num">${formatDollars(e.totalIncome - e.housingCosts)}<span class="ledger-sub">${incomeFormula(e)}</span>${housingLine}</td>
           <td class="ledger-num">${formatDollars(e.totalObligations)}<span class="ledger-sub">${obFormula}</span></td>
           <td class="ledger-balance">${balanceCell}</td>
           <td>${eventCell}</td>
@@ -399,7 +399,7 @@
 
         return `<tr>
           <td class="ledger-month">${e.month}</td>
-          <td class="ledger-num">${formatDollars(e.totalIncome)}<span class="ledger-sub">${incomeFormula(e)}</span>${housingLine}</td>
+          <td class="ledger-num">${formatDollars(e.totalIncome - e.housingCosts)}<span class="ledger-sub">${incomeFormula(e)}</span>${housingLine}</td>
           <td class="ledger-num">${formatDollars(e.totalObligations)}<span class="ledger-sub">${obFormula}</span></td>
           <td class="ledger-pos">${formatDollars(e.surplus)}</td>
           <td class="ledger-mortgages">${mortgageLines}</td>

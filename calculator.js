@@ -370,6 +370,8 @@ function calculateGroup(inputs, sequentialCount = 0) {
 
     const fundBalanceAfterGrowth = fundBalance;
 
+    const activeMortgagesSnapshot = mortgageCount;
+
     let housePurchased = null;
     if (fundBalance >= downPaymentTarget) {
       fundBalance -= downPaymentTarget;
@@ -395,7 +397,7 @@ function calculateGroup(inputs, sequentialCount = 0) {
       fundInterestEarned,
       totalIncome,
       housingCosts:         postHouseMembers * housingCostsMonthly,
-      activeMortgages:      mortgageCount,
+      activeMortgages:      activeMortgagesSnapshot,
       mortgagePaymentStd,
       totalObligations,
       netGrowth,
