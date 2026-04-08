@@ -356,12 +356,11 @@
       // Each income and obligations cell shows the total on top and the
       // formula breakdown as a small sub-line below.
       const p1Rows = phase1.map(e => {
-        const mortgageLine = e.activeMortgages > 0
+        const obFormula = e.activeMortgages > 0
           ? `${e.activeMortgages} mortgage${e.activeMortgages > 1 ? "s" : ""} x ${formatDollars(mortgageStd)}`
           : "none yet";
-        const obFormula = e.housingCosts > 0
-          ? `${mortgageLine}<br>${formatDollars(e.housingCosts)} tax/ins/maint`
-          : mortgageLine;
+        const housingLine = e.housingCosts > 0
+          ? `<span class="ledger-sub">&minus;${formatDollars(e.housingCosts)} tax/ins/maint</span>` : "";
 
         let balanceCell = `${e.netGrowth >= 0 ? "+" : "-"}${formatDollars(Math.abs(e.netGrowth))} &rarr; ${formatDollars(e.fundBalanceAfterGrowth)}`;
         let eventCell   = "";
@@ -373,8 +372,8 @@
         return `<tr${e.housePurchased ? ' class="ledger-purchase-row"' : ''}>
           <td class="ledger-month">${e.month}</td>
           <td class="ledger-housed">${e.postHouseMembers} in / ${e.preHouseMembers} waiting</td>
-          <td class="ledger-num">${formatDollars(e.totalIncome)}<span class="ledger-sub">${incomeFormula(e)}</span></td>
-          <td class="ledger-num">${formatDollars(e.totalObligations + e.housingCosts)}<span class="ledger-sub">${obFormula}</span></td>
+          <td class="ledger-num">${formatDollars(e.totalIncome)}<span class="ledger-sub">${incomeFormula(e)}</span>${housingLine}</td>
+          <td class="ledger-num">${formatDollars(e.totalObligations)}<span class="ledger-sub">${obFormula}</span></td>
           <td class="ledger-balance">${balanceCell}</td>
           <td>${eventCell}</td>
         </tr>`;
@@ -384,9 +383,9 @@
       // Mortgage details stack into one cell — one line per mortgage showing
       // before/after balance with interest and principal as a sub-line.
       const p2Rows = phase2.map(e => {
-        const obFormula = e.housingCosts > 0
-          ? `${e.activeMortgages} x ${formatDollars(mortgageStd)}<br>${formatDollars(e.housingCosts)} tax/ins/maint`
-          : `${e.activeMortgages} x ${formatDollars(mortgageStd)}`;
+        const obFormula   = `${e.activeMortgages} x ${formatDollars(mortgageStd)}`;
+        const housingLine = e.housingCosts > 0
+          ? `<span class="ledger-sub">&minus;${formatDollars(e.housingCosts)} tax/ins/maint</span>` : "";
 
         const mortgageLines = e.mortgageDetails.map(d => {
           if (d.balanceBefore === 0 && d.balanceAfter === 0) {
@@ -400,8 +399,8 @@
 
         return `<tr>
           <td class="ledger-month">${e.month}</td>
-          <td class="ledger-num">${formatDollars(e.totalIncome)}<span class="ledger-sub">${incomeFormula(e)}</span></td>
-          <td class="ledger-num">${formatDollars(e.totalObligations + e.housingCosts)}<span class="ledger-sub">${obFormula}</span></td>
+          <td class="ledger-num">${formatDollars(e.totalIncome)}<span class="ledger-sub">${incomeFormula(e)}</span>${housingLine}</td>
+          <td class="ledger-num">${formatDollars(e.totalObligations)}<span class="ledger-sub">${obFormula}</span></td>
           <td class="ledger-pos">${formatDollars(e.surplus)}</td>
           <td class="ledger-mortgages">${mortgageLines}</td>
         </tr>`;
@@ -415,7 +414,7 @@
           <h3 class="ledger-heading">${p1Label}</h3>
           <p class="ledger-formula-key">
             Standard mortgage payment: ${formatDollars(mortgageStd)}/mo per house owned.
-            Net = income - obligations (mortgages + tax/insurance/maintenance), added to fund each month.
+            Net = (income &minus; tax/ins/maint) &minus; mortgage obligations, added to fund each month.
             Highlighted rows show a house purchase — down payment withdrawn from fund.
           </p>
           <div class="ledger-scroll">
