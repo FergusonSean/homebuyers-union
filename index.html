@@ -127,28 +127,8 @@
               <input class="calc-input" type="number" id="downPaymentPct" name="downPaymentPct" min="3" max="50" step="1" value="20">
             </div>
             <div class="calc-field">
-              <label class="calc-label" for="closingCostsPct">Closing costs (% of price)</label>
-              <input class="calc-input" type="number" id="closingCostsPct" name="closingCostsPct" min="0" max="10" step="0.1" value="3">
-            </div>
-            <div class="calc-field">
               <label class="calc-label" for="annualRatePct">Mortgage interest rate (%)</label>
               <input class="calc-input" type="number" id="annualRatePct" name="annualRatePct" min="1" max="20" step="0.1" value="7">
-            </div>
-            <div class="calc-field">
-              <label class="calc-label" for="termYears">Mortgage term (years)</label>
-              <input class="calc-input" type="number" id="termYears" name="termYears" min="10" max="40" step="1" value="30">
-            </div>
-            <div class="calc-field">
-              <label class="calc-label" for="propertyTaxPct">Property tax (% of home/yr)</label>
-              <input class="calc-input" type="number" id="propertyTaxPct" name="propertyTaxPct" min="0" max="5" step="0.05" value="1.1">
-            </div>
-            <div class="calc-field">
-              <label class="calc-label" for="insuranceMonthly">Home insurance ($/mo)</label>
-              <input class="calc-input" type="number" id="insuranceMonthly" name="insuranceMonthly" min="0" max="5000" step="10" value="150">
-            </div>
-            <div class="calc-field">
-              <label class="calc-label" for="maintenancePct">Maintenance (% of home/yr)</label>
-              <input class="calc-input" type="number" id="maintenancePct" name="maintenancePct" min="0" max="5" step="0.1" value="1">
             </div>
           </fieldset>
 
@@ -176,10 +156,50 @@
             </div>
           </fieldset>
 
-          <fieldset class="calc-fieldset" id="member-prices-fieldset">
-            <legend class="calc-legend">Member home prices</legend>
-            <div id="member-prices-list"></div>
-          </fieldset>
+          <!-- Advanced options toggle -->
+          <div class="calc-advanced-toggle-row">
+            <button
+              type="button"
+              class="calc-advanced-toggle"
+              id="advanced-toggle"
+              aria-expanded="false"
+              aria-controls="advanced-options"
+            >Show advanced options <span class="calc-advanced-toggle__chevron" aria-hidden="true">&#9662;</span></button>
+          </div>
+
+          <!-- Advanced options container -->
+          <div id="advanced-options" class="calc-advanced-panel" hidden>
+
+            <fieldset class="calc-fieldset">
+              <legend class="calc-legend">Housing — advanced</legend>
+              <div class="calc-field">
+                <label class="calc-label" for="closingCostsPct">Closing costs (% of price)</label>
+                <input class="calc-input" type="number" id="closingCostsPct" name="closingCostsPct" min="0" max="10" step="0.1" value="3">
+              </div>
+              <div class="calc-field">
+                <label class="calc-label" for="termYears">Mortgage term (years)</label>
+                <input class="calc-input" type="number" id="termYears" name="termYears" min="10" max="40" step="1" value="30">
+              </div>
+              <div class="calc-field">
+                <label class="calc-label" for="propertyTaxPct">Property tax (% of home/yr)</label>
+                <input class="calc-input" type="number" id="propertyTaxPct" name="propertyTaxPct" min="0" max="5" step="0.05" value="1.1">
+              </div>
+              <div class="calc-field">
+                <label class="calc-label" for="insuranceMonthly">Home insurance ($/mo)</label>
+                <input class="calc-input" type="number" id="insuranceMonthly" name="insuranceMonthly" min="0" max="5000" step="10" value="150">
+              </div>
+              <div class="calc-field">
+                <label class="calc-label" for="maintenancePct">Maintenance (% of home/yr)</label>
+                <input class="calc-input" type="number" id="maintenancePct" name="maintenancePct" min="0" max="5" step="0.1" value="1">
+              </div>
+            </fieldset>
+
+            <fieldset class="calc-fieldset" id="member-prices-fieldset">
+              <legend class="calc-legend">Member home prices</legend>
+              <div id="member-prices-list"></div>
+            </fieldset>
+
+          </div>
 
         </form>
 
@@ -991,6 +1011,26 @@
 
     renderMemberPriceInputs();
     runCalculation();
+
+    // ── Advanced options toggle ──────────────────────────────────────────
+    (function () {
+      var btn   = document.getElementById("advanced-toggle");
+      var panel = document.getElementById("advanced-options");
+
+      btn.addEventListener("click", function () {
+        var isOpen = !panel.hidden;
+        panel.hidden = isOpen;
+        btn.setAttribute("aria-expanded", String(!isOpen));
+        var chevron = btn.querySelector(".calc-advanced-toggle__chevron");
+        if (isOpen) {
+          btn.firstChild.textContent = "Show advanced options ";
+          chevron.innerHTML = "&#9662;";
+        } else {
+          btn.firstChild.textContent = "Hide advanced options ";
+          chevron.innerHTML = "&#9652;";
+        }
+      });
+    }());
   </script>
 
 </body>

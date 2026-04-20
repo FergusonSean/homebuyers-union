@@ -1085,3 +1085,73 @@ a.nav__wordmark:hover {
   color: #aaa;
   font-style: italic;
 }
+
+/* ── Calculator advanced options ────────────────────────────────────────────── */
+
+/* The toggle row and the advanced panel each span both grid columns */
+.calc-advanced-toggle-row,
+.calc-advanced-panel {
+  grid-column: 1 / -1;
+}
+
+.calc-advanced-toggle-row {
+  display: flex;
+  align-items: center;
+  border-top: 1px solid #e8e4de;
+  padding-top: 0.85rem;
+}
+
+/* Subtle text-link style button — not a CTA */
+.calc-advanced-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: "Inter", sans-serif;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #8B1A1A;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: rgba(139, 26, 26, 0.35);
+  transition: color 0.15s, text-decoration-color 0.15s;
+  line-height: 1;
+}
+
+.calc-advanced-toggle:hover {
+  color: #6e1414;
+  text-decoration-color: #6e1414;
+}
+
+.calc-advanced-toggle:focus-visible {
+  outline: 2px solid #8B1A1A;
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.calc-advanced-toggle__chevron {
+  font-size: 0.75em;
+  line-height: 1;
+  transition: transform 0.2s ease;
+}
+
+/* The advanced panel uses the same two-column grid as the parent form */
+.calc-advanced-panel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.calc-advanced-panel[hidden] {
+  display: none;
+}
+
+@media (max-width: 599px) {
+  .calc-advanced-panel {
+    grid-template-columns: 1fr;
+  }
+}
