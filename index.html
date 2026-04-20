@@ -199,6 +199,22 @@
               <div id="member-prices-list"></div>
             </fieldset>
 
+            <fieldset class="calc-fieldset">
+              <legend class="calc-legend">Dropout scenario</legend>
+              <div class="calc-field">
+                <label class="calc-label" for="dropout-member">Member who drops out</label>
+                <select class="calc-input" id="dropout-member"></select>
+              </div>
+              <div class="calc-field">
+                <label class="calc-label" for="dropout-month">Dropout month</label>
+                <input class="calc-input" type="number" id="dropout-month" min="1" step="1" value="12">
+              </div>
+              <div class="calc-field">
+                <label class="calc-label" for="dropout-sale-price">Sale price if already housed ($)</label>
+                <input class="calc-input" type="number" id="dropout-sale-price" min="0" step="1000">
+              </div>
+            </fieldset>
+
           </div>
 
         </form>
@@ -210,28 +226,7 @@
 
       <div id="ledger-area"></div>
 
-      <div id="dropout-section" class="dropout-section">
-        <h3 class="dropout-heading">Model a dropout</h3>
-        <p class="dropout-desc">See how the group's timeline changes if one member stops paying.</p>
-        <form class="dropout-form" id="dropout-form" novalidate>
-          <div class="dropout-fields">
-            <div class="calc-field">
-              <label class="calc-label" for="dropout-member">Member who drops out</label>
-              <select class="calc-input" id="dropout-member"></select>
-            </div>
-            <div class="calc-field">
-              <label class="calc-label" for="dropout-month">Dropout month</label>
-              <input class="calc-input" type="number" id="dropout-month" min="1" step="1" value="12">
-            </div>
-            <div class="calc-field">
-              <label class="calc-label" for="dropout-sale-price">Sale price if already housed ($)</label>
-              <input class="calc-input" type="number" id="dropout-sale-price" min="0" step="1000">
-            </div>
-          </div>
-          <button class="btn btn--outline" type="submit">Run dropout scenario</button>
-        </form>
-        <div id="dropout-results"></div>
-      </div>
+      <div id="dropout-results"></div>
     </div>
   </section>
 
@@ -1041,14 +1036,13 @@
     var _lastDropoutInputs = null;
     var _lastBaseResult    = null;
 
-    // Called at the end of runCalculation to keep the dropout form in sync.
+    // Called at the end of runCalculation — syncs the dropout fieldset and re-runs the scenario.
     function dropoutSyncAfterCalculation(inputs, baseResult) {
       _lastDropoutInputs = inputs;
       _lastBaseResult    = baseResult;
       populateDropoutMemberSelect(inputs.groupSize);
       syncDropoutSalePrice();
-      // Clear stale results whenever the main inputs change.
-      document.getElementById("dropout-results").innerHTML = "";
+      runDropoutScenario();
     }
 
     // Populates the dropout member select with one option per group member.
@@ -1076,8 +1070,6 @@
         || _lastDropoutInputs.homePrice;
       document.getElementById("dropout-sale-price").value = memberPrice;
     }
-
-    document.getElementById("dropout-member").addEventListener("change", syncDropoutSalePrice);
 
     // Renders the dropout scenario results: event summary and comparison table.
     function renderDropoutResults(baseResult, dropoutResult, inputs) {
@@ -1195,19 +1187,26 @@
         "</div>";
     }
 
-    document.getElementById("dropout-form").addEventListener("submit", function (e) {
-      e.preventDefault();
+    function runDropoutScenario() {
       if (!_lastDropoutInputs || !_lastBaseResult) return;
-
       var memberIdx = parseInt(document.getElementById("dropout-member").value);
       var month     = parseInt(document.getElementById("dropout-month").value);
       var salePrice = parseFloat(document.getElementById("dropout-sale-price").value) || 0;
-
+      if (isNaN(memberIdx) || isNaN(month) || month < 1) {
+        document.getElementById("dropout-results").innerHTML = "";
+        return;
+      }
       var dropout = { memberIndex: memberIdx, month: month, salePrice: salePrice };
       var result  = calculateGroupWithDropout(_lastDropoutInputs, 0, dropout);
-
       renderDropoutResults(_lastBaseResult, result, _lastDropoutInputs);
+    }
+
+    document.getElementById("dropout-member").addEventListener("change", function () {
+      syncDropoutSalePrice();
+      runDropoutScenario();
     });
+    document.getElementById("dropout-month").addEventListener("input", runDropoutScenario);
+    document.getElementById("dropout-sale-price").addEventListener("input", runDropoutScenario);
 
     renderMemberPriceInputs();
     runCalculation();
