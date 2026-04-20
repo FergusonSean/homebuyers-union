@@ -363,14 +363,120 @@ assert("late dropout: all members housed", lateDropout.positions.every(p => p.mo
 const hasDropoutEvent = lateDropout.ledger.some(e => e.dropoutEvent);
 assert("late dropout: no dropoutEvent in ledger (dropout month never reached)", !hasDropoutEvent);
 
-console.log("\ncalculateGroupWithDropout — rejects non-parallel sequentialCount:");
+console.log("\ncalculateGroupWithDropout — sequentialCount=1 now supported:");
 
-const nonParallelDropout = calculateGroupWithDropout(
+// sequentialCount > 0 is now fully supported. A dropout at month 5 in a hybrid
+// K=1 group of 3 should complete without error.
+const hybridDropout = calculateGroupWithDropout(
   { homePrice: 300000, groupSize: 3, c1: 1000, c2: 2500, downPaymentPct: 0.20, annualRatePct: 7, termYears: 30, monthlyDonorContrib: 0 },
   1,
-  { memberIndex: 0, month: 5, salePrice: 0 }
+  { memberIndex: 2, month: 5, salePrice: 0 }
 );
-assert("non-parallel dropout: returns error", typeof nonParallelDropout.error === "string" && nonParallelDropout.error.length > 0);
+assert("hybrid dropout K=1: no error (sequentialCount > 0 is supported)", hybridDropout.error === null);
+assert("hybrid dropout K=1: returns 3 positions", hybridDropout.positions && hybridDropout.positions.length === 3);
+
+// ─── calculateGroupWithDropout — sequentialCount > 0 ──────────────────────────
+
+console.log("\ncalculateGroupWithDropout — pre-move-in dropout with sequentialCount=1:");
+
+// Group of 3, K=1. Member 0 is the first sequential target.
+// Member 0 drops out before being housed at month 3 — earlier than it would take
+// to save the down payment (with c1=800 and homePrice=300000 at 20% down = $60,000,
+// it takes many months, so month 3 is definitely pre-move-in).
+const seqPreDropoutInputs = {
+  homePrice:      300000,
+  groupSize:      3,
+  c1:             800,
+  c2:             2500,
+  downPaymentPct: 0.20,
+  annualRatePct:  7,
+  termYears:      30,
+  monthlyDonorContrib: 0,
+};
+
+const seqPreDropout = calculateGroupWithDropout(seqPreDropoutInputs, 1, {
+  memberIndex: 0,
+  month:       3,
+  salePrice:   0, // ignored for pre-move-in
+});
+
+assert("seq pre-move-in dropout K=1: no error", seqPreDropout.error === null);
+assert("seq pre-move-in dropout K=1: returns 3 positions", seqPreDropout.positions && seqPreDropout.positions.length === 3);
+assert(
+  "seq pre-move-in dropout K=1: dropped member (index 0) has null monthsUntilHoused",
+  seqPreDropout.positions[0].monthsUntilHoused === null
+);
+assert(
+  "seq pre-move-in dropout K=1: remaining members (1 and 2) are housed",
+  seqPreDropout.positions[1].monthsUntilHoused !== null &&
+  seqPreDropout.positions[2].monthsUntilHoused !== null
+);
+// The ledger must contain a dropoutEvent entry of type pre-move-in.
+const seqPreEvent = seqPreDropout.ledger.find(e => e.dropoutEvent);
+assert("seq pre-move-in dropout K=1: ledger contains a dropoutEvent entry", !!seqPreEvent);
+if (seqPreEvent) {
+  assert("seq pre-move-in dropout K=1: type is pre-move-in", seqPreEvent.dropoutEvent.type === 'pre-move-in');
+  assert("seq pre-move-in dropout K=1: c1Refund >= 0", seqPreEvent.dropoutEvent.c1Refund >= 0);
+  // Refund should equal 3 months of c1 contributions (months 1-3).
+  assertClose(
+    "seq pre-move-in dropout K=1: c1Refund equals 3 months of c1",
+    seqPreEvent.dropoutEvent.c1Refund,
+    3 * seqPreDropoutInputs.c1,
+    seqPreDropoutInputs.c1
+  );
+}
+
+console.log("\ncalculateGroupWithDropout — post-move-in dropout with sequentialCount=2:");
+
+// Group of 4, K=2. With high contributions, member 0 is housed quickly in the
+// first sequential cycle (saving phase). Member 0 then drops out after being housed.
+const seqPostDropoutInputs = {
+  homePrice:      200000,
+  groupSize:      4,
+  c1:             8000,
+  c2:             5000,
+  downPaymentPct: 0.20,
+  annualRatePct:  6,
+  termYears:      30,
+  monthlyDonorContrib: 0,
+};
+
+// Find when member 0 is housed under the baseline K=2 model.
+const baselineK2 = calculateGroupWithDropout(seqPostDropoutInputs, 2, {
+  memberIndex: 3,
+  month:       9999,
+  salePrice:   0,
+});
+assert("seq post-move-in dropout K=2: baseline completes", baselineK2.error === null);
+
+const member0HousedInK2 = baselineK2.positions[0].monthsUntilHoused;
+assert("seq post-move-in dropout K=2: member 0 is housed", member0HousedInK2 !== null);
+
+// Dropout at member0HousedInK2 + 2 (definitely post-move-in).
+const seqPostDropout = calculateGroupWithDropout(seqPostDropoutInputs, 2, {
+  memberIndex: 0,
+  month:       member0HousedInK2 + 2,
+  salePrice:   180000,
+});
+
+assert("seq post-move-in dropout K=2: no error", seqPostDropout.error === null);
+assert(
+  "seq post-move-in dropout K=2: dropped member (index 0) has null monthsUntilHoused",
+  seqPostDropout.positions[0].monthsUntilHoused === null
+);
+assert(
+  "seq post-move-in dropout K=2: remaining members (1, 2, 3) are housed",
+  seqPostDropout.positions[1].monthsUntilHoused !== null &&
+  seqPostDropout.positions[2].monthsUntilHoused !== null &&
+  seqPostDropout.positions[3].monthsUntilHoused !== null
+);
+const seqPostEvent = seqPostDropout.ledger.find(e => e.dropoutEvent);
+assert("seq post-move-in dropout K=2: ledger contains a dropoutEvent entry", !!seqPostEvent);
+if (seqPostEvent) {
+  assert("seq post-move-in dropout K=2: type is post-move-in", seqPostEvent.dropoutEvent.type === 'post-move-in');
+  assert("seq post-move-in dropout K=2: saleMonth = dropoutMonth + 2",
+    seqPostEvent.dropoutEvent.saleMonth === member0HousedInK2 + 2 + 2);
+}
 
 // ─── Summary ──────────────────────────────────────────────────────────────────
 

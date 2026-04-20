@@ -889,29 +889,24 @@ function traditionalAcceleratedPathLedger(homePrice, c1, c2, annualRatePct, term
 
 // ─── Dropout scenario simulation ─────────────────────────────────────────────
 
-// Simulates the Homebuyers Union group under the pure-parallel model (K=0) with
-// a single member dropout at a specified month.
+// Simulates the Homebuyers Union group with a single member dropout at a
+// specified month, supporting any sequentialCount (0 through N).
 //
 // dropout: { memberIndex: number (0-based), month: number (1-indexed), salePrice: number }
 //
 // Pre-move-in dropout:
 //   - Member stops contributing C1 immediately.
-//   - Fund pays back exactly what that member contributed in C1 (their totalPaid[k]).
+//   - Fund pays back exactly what that member contributed (their totalPaid[k]).
 //   - Member's house position is permanently skipped.
 //
 // Post-move-in dropout:
 //   - Member stops contributing C2 immediately.
 //   - Fund services that mortgage for 2 more months (member contributes nothing).
-//   - At dropout month + 2: fund receives max(0, salePrice - remainingMortgageBalance).
+//   - At dropout month + 2: fund receives (salePrice - remainingMortgageBalance).
 //   - Mortgage is removed entirely after the sale.
 //
 // Returns the same shape as calculateGroup plus a `dropout` echo field.
-// Returns { error } if sequentialCount !== 0.
 function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
-  if (sequentialCount !== 0) {
-    return { error: "Dropout scenarios are only supported for the parallel model." };
-  }
-
   const {
     homePrice,
     groupSize: N,
@@ -938,6 +933,11 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
   const mortgagePayments = loanPrincipals.map(lp => monthlyMortgagePayment(lp, annualRatePct, termYears));
   const housingCostsList = homePrices.map(p => p * (propertyTaxPct / 100 + maintenancePct / 100) / 12 + insuranceMonthly);
 
+  // Prefix sum: housingCostsCumulative[k] = total housing costs for k housed members.
+  const housingCostsCumulative = Array.from({ length: N + 1 }, (_, k) =>
+    housingCostsList.slice(0, k).reduce((a, b) => a + b, 0)
+  );
+
   const r     = annualRatePct / 100 / 12;
   const fundR = fundYieldPct  / 100 / 12;
 
@@ -945,46 +945,275 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
 
   // Track when each member was housed (1-indexed month), null if not yet housed.
   const housedAtMonth      = new Array(N).fill(null);
-  // Track when each member's mortgage started (for balance calculation).
+  // Track when each member's Phase-B mortgage started (for balance calculation).
   const mortgageStartMonth = new Array(N).fill(null);
   // Running total paid per member.
   const totalPaid          = new Array(N).fill(0);
 
-  // dropout state
-  let dropoutEventApplied = false;
-  // true once the dropout has been processed
-  let dropoutMemberExcluded = false;
-  // pre-move-in: member skipped permanently
-  let dropoutMortgagePendingSale = false;
-  // post-move-in: mortgage awaiting sale
-  let dropoutSaleMonth = null;
-  // the month proceeds arrive
-  let dropoutC1Refund = null;
-  // amount refunded for pre-move-in dropout
-  let dropoutType = null;
-  // 'pre-move-in' | 'post-move-in'
+  // contributing[k] = true while member k is actively paying into the fund.
+  // Starts true for all; set false when the dropout event fires.
+  const contributing = new Array(N).fill(true);
 
-  const ledger      = [];
-  let month         = 0;
-  let fundBalance   = 0;
-  let housedCount   = 0;
-  let mortgageCount = 0;
+  // Dropout state — all flags start unset.
+  let dropoutApplied             = false;
+  let dropoutMemberExcluded      = false; // pre-move-in: member's position skipped forever
+  let dropoutMortgagePendingSale = false; // post-move-in: mortgage awaiting sale
+  let dropoutSaleMonth           = null;  // month proceeds arrive
+  let dropoutType                = null;  // 'pre-move-in' | 'post-move-in'
 
-  // ── Phase B1: buy all N homes with mortgages (skipping dropout member if pre-move-in) ──
+  const ledger    = [];
+  let month       = 0;
+  let fundBalance = 0;
 
-  // The target count of housed members. When the dropout is pre-move-in, we
-  // still iterate until all non-skipped positions are housed.
-  function allNonDropoutMembersHoused() {
-    for (let k = 0; k < N; k++) {
-      if (k === dropoutIdx && dropoutMemberExcluded) continue;
-      if (housedAtMonth[k] === null) return false;
+  // ── Phase A: sequential buy+payoff for the first sequentialCount homes ────────
+  //
+  // Mirrors calculateGroup's Phase A, but respects the contributing[] array and
+  // applies the dropout event mid-loop.
+
+  let carryover    = 0;
+  let phaseAHouseIndexOfDropout = null; // which sequential position the dropout member occupies
+
+  for (let k = 0; k < sequentialCount; k++) {
+    // Members 0..k-1 are housed (paying C2). Members k..N-1 are waiting (paying C1).
+    // housedMembers = indices 0..k-1; waitingMembers = indices k..N-1.
+
+    // ── Saving sub-phase ─────────────────────────────────────────────────────
+    let savingFund = carryover;
+    carryover      = 0;
+
+    // Returns true if we need to break out of the saving loop early because the
+    // dropout member is at sequential position k and just dropped out pre-move-in.
+    let skipThisK = false;
+
+    while (savingFund < purchaseTargets[k]) {
+      if (month >= MAX_MONTHS) {
+        return { error: "Simulation exceeded 1200 months. Try different inputs.", positions: null, totalMonths: null, traditional: null, ledger: null };
+      }
+
+      // Income from contributing members only.
+      const c2Income = Array.from({ length: k }, (_, i) => contributing[i] ? c2 : 0).reduce((a, b) => a + b, 0);
+      const c1Income = Array.from({ length: N - k }, (_, i) => contributing[k + i] ? c1 : 0).reduce((a, b) => a + b, 0);
+
+      for (let i = 0; i < N; i++) {
+        if (!contributing[i]) continue;
+        totalPaid[i] += i < k ? c2 : c1;
+      }
+
+      const fundInterestEarned = savingFund * fundR;
+      savingFund += c2Income + c1Income + monthlyDonorContrib + fundInterestEarned - housingCostsCumulative[k];
+      month++;
+
+      ledger.push({
+        month,
+        phase:          'saving',
+        houseIndex:     k + 1,
+        housedMembers:  k,
+        waitingMembers: N - k,
+        c2Income,
+        c1Income,
+        donorIncome:    monthlyDonorContrib,
+        fundInterestEarned,
+        totalIncome:    c2Income + c1Income + monthlyDonorContrib + fundInterestEarned,
+        housingCosts:   housingCostsCumulative[k],
+        fundBalance:    savingFund,
+        downPaymentTarget: purchaseTargets[k],
+        closingCosts:   closingCostsList[k],
+        housePurchased: savingFund >= purchaseTargets[k],
+        mortgageBalanceBefore: null, interestCharged: null,
+        principalPaid: null, mortgageBalanceAfter: null, overpayment: null,
+      });
+
+      // Apply dropout event if this is the dropout month.
+      if (month === dropoutMonth && !dropoutApplied) {
+        dropoutApplied = true;
+        contributing[dropoutIdx] = false;
+
+        if (housedAtMonth[dropoutIdx] === null) {
+          // Pre-move-in dropout in Phase A.
+          dropoutType           = 'pre-move-in';
+          const c1Refund        = totalPaid[dropoutIdx];
+          savingFund           -= c1Refund;
+          dropoutMemberExcluded = true;
+
+          ledger[ledger.length - 1].dropoutEvent = {
+            memberIndex: dropoutIdx,
+            type:        'pre-move-in',
+            c1Refund,
+            saleMonth:   null,
+          };
+
+          // If this position k IS the dropout member, stop saving for k and skip it.
+          if (k === dropoutIdx) {
+            skipThisK = true;
+            break;
+          }
+        } else {
+          // Post-move-in dropout in Phase A (dropout member was housed in an earlier cycle).
+          dropoutType                = 'post-move-in';
+          dropoutSaleMonth           = month + 2;
+          dropoutMortgagePendingSale = true;
+          phaseAHouseIndexOfDropout  = dropoutIdx;
+
+          ledger[ledger.length - 1].dropoutEvent = {
+            memberIndex: dropoutIdx,
+            type:        'post-move-in',
+            c1Refund:    null,
+            saleMonth:   dropoutSaleMonth,
+          };
+        }
+      }
+
+      // Consume sale proceeds if the sale month arrives during the saving sub-phase.
+      if (dropoutMortgagePendingSale && month === dropoutSaleMonth) {
+        // Phase A mortgages don't have a mortgageStartMonth entry — they are tracked
+        // by how many months into the payoff sub-phase they ran. At this point the
+        // dropout occurred while an earlier cycle was in saving sub-phase, so
+        // the dropout member's mortgage was being paid off in a prior payoff sub-phase.
+        // We approximate the balance using elapsed months since they were housed.
+        const monthsPaid   = month - housedAtMonth[dropoutIdx];
+        const remainingBal = Math.max(0, remainingBalance(loanPrincipals[dropoutIdx], annualRatePct, termYears, monthsPaid));
+        const proceeds     = salePrice - remainingBal;
+        savingFund        += proceeds;
+        dropoutMortgagePendingSale = false;
+
+        ledger[ledger.length - 1].saleEvent = {
+          memberIndex:      dropoutIdx,
+          salePrice,
+          remainingBalance: remainingBal,
+          proceeds,
+        };
+      }
     }
-    return true;
+
+    // If the dropout member was at position k and dropped out pre-move-in, skip k.
+    if (skipThisK) {
+      // housedAtMonth[k] stays null; the sequential position k is abandoned.
+      // carryover stays 0 (the c1Refund already reduced savingFund).
+      continue;
+    }
+
+    savingFund -= purchaseTargets[k];
+    housedAtMonth[k] = month;
+
+    // ── Payoff sub-phase ─────────────────────────────────────────────────────
+    let mortgageBalance = Math.max(0, loanPrincipals[k] - savingFund);
+    if (savingFund > loanPrincipals[k]) carryover = savingFund - loanPrincipals[k];
+
+    while (mortgageBalance > 0) {
+      if (month >= MAX_MONTHS) {
+        return { error: "Simulation exceeded 1200 months. Try different inputs.", positions: null, totalMonths: null, traditional: null, ledger: null };
+      }
+
+      // Income from contributing members only.
+      // At this point k+1 members are housed (0..k) and N-k-1 are waiting (k+1..N-1).
+      const c2Income = Array.from({ length: k + 1 }, (_, i) => contributing[i] ? c2 : 0).reduce((a, b) => a + b, 0);
+      const c1Income = Array.from({ length: N - k - 1 }, (_, i) => contributing[k + 1 + i] ? c1 : 0).reduce((a, b) => a + b, 0);
+
+      for (let i = 0; i < N; i++) {
+        if (!contributing[i]) continue;
+        totalPaid[i] += i <= k ? c2 : c1;
+      }
+
+      const grossIncome    = c2Income + c1Income + monthlyDonorContrib;
+      const payoffIncome   = grossIncome - housingCostsCumulative[k + 1];
+
+      const balanceBefore  = mortgageBalance;
+      const interestCharged = balanceBefore * r;
+      const totalOwed      = balanceBefore + interestCharged;
+      const payment        = Math.min(payoffIncome, totalOwed);
+      const principalPaid  = payment - interestCharged;
+      const overpayment    = Math.max(0, payoffIncome - totalOwed);
+
+      mortgageBalance = Math.max(0, balanceBefore - principalPaid);
+      month++;
+      if (overpayment > 0) carryover = overpayment;
+
+      ledger.push({
+        month,
+        phase:          'payoff',
+        houseIndex:     k + 1,
+        housedMembers:  k + 1,
+        waitingMembers: N - k - 1,
+        c2Income,
+        c1Income,
+        donorIncome:    monthlyDonorContrib,
+        totalIncome:    grossIncome,
+        housingCosts:   housingCostsCumulative[k + 1],
+        fundBalance: null, downPaymentTarget: null, housePurchased: null,
+        mortgageBalanceBefore: balanceBefore,
+        interestCharged,
+        principalPaid,
+        mortgageBalanceAfter: mortgageBalance,
+        overpayment,
+      });
+
+      // Apply dropout event if this is the dropout month.
+      if (month === dropoutMonth && !dropoutApplied) {
+        dropoutApplied = true;
+        contributing[dropoutIdx] = false;
+
+        if (housedAtMonth[dropoutIdx] === null) {
+          // Pre-move-in dropout during payoff sub-phase.
+          dropoutType           = 'pre-move-in';
+          const c1Refund        = totalPaid[dropoutIdx];
+          // Cannot reduce mortgageBalance directly — we will treat it as a fund-level
+          // adjustment carried into Phase B. We record the refund in the ledger.
+          dropoutMemberExcluded = true;
+          carryover            -= c1Refund; // reduces what carries into next phase
+
+          ledger[ledger.length - 1].dropoutEvent = {
+            memberIndex: dropoutIdx,
+            type:        'pre-move-in',
+            c1Refund,
+            saleMonth:   null,
+          };
+        } else {
+          // Post-move-in dropout during payoff sub-phase.
+          dropoutType                = 'post-move-in';
+          dropoutSaleMonth           = month + 2;
+          dropoutMortgagePendingSale = true;
+          phaseAHouseIndexOfDropout  = dropoutIdx;
+
+          ledger[ledger.length - 1].dropoutEvent = {
+            memberIndex: dropoutIdx,
+            type:        'post-move-in',
+            c1Refund:    null,
+            saleMonth:   dropoutSaleMonth,
+          };
+        }
+      }
+
+      // Consume sale proceeds if the sale month arrives during the payoff sub-phase.
+      if (dropoutMortgagePendingSale && month === dropoutSaleMonth && phaseAHouseIndexOfDropout !== null) {
+        const monthsPaid   = month - housedAtMonth[dropoutIdx];
+        const remainingBal = Math.max(0, remainingBalance(loanPrincipals[dropoutIdx], annualRatePct, termYears, monthsPaid));
+        const proceeds     = salePrice - remainingBal;
+        // Apply proceeds as a carryover into the next phase (or reduce current mortgage).
+        carryover         += proceeds;
+        dropoutMortgagePendingSale = false;
+
+        ledger[ledger.length - 1].saleEvent = {
+          memberIndex:      dropoutIdx,
+          salePrice,
+          remainingBalance: remainingBal,
+          proceeds,
+        };
+      }
+    }
   }
 
-  // The index of the next member to be housed (skipping dropout member if excluded).
-  function nextHousingIndex() {
-    for (let k = 0; k < N; k++) {
+  // Phase B starts with carryover as the initial fund balance; sequentialCount
+  // members are already housed with their mortgages fully paid off.
+  fundBalance = carryover;
+  let housedCount   = sequentialCount;
+  let mortgageCount = 0;
+
+  // ── Phase B1: buy remaining (N − sequentialCount) homes with mortgages ──────
+
+  // The index of the next member to be housed in Phase B (skipping dropout member
+  // if they were excluded pre-move-in).
+  function nextBHousingIndex() {
+    for (let k = sequentialCount; k < N; k++) {
       if (housedAtMonth[k] !== null) continue;
       if (k === dropoutIdx && dropoutMemberExcluded) continue;
       return k;
@@ -992,17 +1221,24 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
     return -1;
   }
 
-  while (!allNonDropoutMembersHoused()) {
+  function allBMembersHoused() {
+    for (let k = sequentialCount; k < N; k++) {
+      if (k === dropoutIdx && dropoutMemberExcluded) continue;
+      if (housedAtMonth[k] === null) return false;
+    }
+    return true;
+  }
+
+  while (!allBMembersHoused()) {
     if (month >= MAX_MONTHS) {
       return { error: "Simulation exceeded 1200 months. Try different inputs.", positions: null, totalMonths: null, traditional: null, ledger: null };
     }
 
-    // Collect income: housed members pay C2, unhoused pay C1.
-    // Dropout member excluded after their dropout event.
+    // Collect income: housed members pay C2, unhoused pay C1 — for contributing members only.
     let postHouseMembers = 0;
     let preHouseMembers  = 0;
     for (let k = 0; k < N; k++) {
-      if (k === dropoutIdx && dropoutEventApplied) continue;
+      if (!contributing[k]) continue;
       if (housedAtMonth[k] !== null) {
         postHouseMembers++;
       } else {
@@ -1015,33 +1251,28 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
     const fundInterestEarned = fundBalance * fundR;
     const totalIncome        = c2Income + c1Income + monthlyDonorContrib + fundInterestEarned;
 
-    // Sum mortgage payments for all active (non-pending-sale) mortgages.
-    // The pending-sale mortgage still accrues its standard payment for 2 months
-    // after dropout, but it is not an "obligation" in the sense that it reduces
-    // the fund — it IS paid by the fund. We handle it as part of obligations.
+    // Sum mortgage obligations: Phase-B mortgages only. Pending-sale mortgage still paid until sale.
     let totalObligations = 0;
     for (let k = 0; k < N; k++) {
       if (mortgageStartMonth[k] === null) continue;
-      // Pending-sale mortgages still require their payment until the sale month.
       if (k === dropoutIdx && dropoutMortgagePendingSale && month >= dropoutSaleMonth) continue;
       totalObligations += mortgagePayments[k];
     }
 
-    // Sum housing costs for all currently housed members (including dropout member
-    // while still in house, i.e., until sale completes).
+    // Housing costs: currently housed members (dropout's house excluded after sale).
     let currentHousingCosts = 0;
     for (let k = 0; k < N; k++) {
       if (housedAtMonth[k] === null) continue;
       if (k === dropoutIdx && dropoutMortgagePendingSale && month >= dropoutSaleMonth) continue;
+      if (k === dropoutIdx && dropoutMemberExcluded) continue;
       currentHousingCosts += housingCostsList[k];
     }
 
     const netGrowth        = totalIncome - totalObligations - currentHousingCosts;
     const fundBalanceStart = fundBalance;
 
-    // Accumulate totalPaid for each contributing member.
     for (let k = 0; k < N; k++) {
-      if (k === dropoutIdx && dropoutEventApplied) continue;
+      if (!contributing[k]) continue;
       totalPaid[k] += housedAtMonth[k] !== null ? c2 : c1;
     }
 
@@ -1051,26 +1282,27 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
     const fundBalanceAfterGrowth  = fundBalance;
     const activeMortgagesSnapshot = mortgageCount;
 
-    // Apply dropout event if this is the dropout month and it hasn't been applied.
+    // Apply dropout event if this is the dropout month.
     let dropoutEventThisMonth = null;
-    if (month === dropoutMonth && !dropoutEventApplied) {
-      dropoutEventApplied = true;
+    if (month === dropoutMonth && !dropoutApplied) {
+      dropoutApplied           = true;
+      contributing[dropoutIdx] = false;
 
       if (housedAtMonth[dropoutIdx] === null) {
-        // Pre-move-in dropout.
+        // Pre-move-in dropout in Phase B.
         dropoutType           = 'pre-move-in';
-        dropoutC1Refund       = totalPaid[dropoutIdx];
-        fundBalance          -= dropoutC1Refund;
+        const c1Refund        = totalPaid[dropoutIdx];
+        fundBalance          -= c1Refund;
         dropoutMemberExcluded = true;
 
         dropoutEventThisMonth = {
           memberIndex: dropoutIdx,
           type:        'pre-move-in',
-          c1Refund:    dropoutC1Refund,
+          c1Refund,
           saleMonth:   null,
         };
       } else {
-        // Post-move-in dropout.
+        // Post-move-in dropout in Phase B.
         dropoutType                = 'post-move-in';
         dropoutSaleMonth           = month + 2;
         dropoutMortgagePendingSale = true;
@@ -1087,12 +1319,13 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
     // Apply sale proceeds if this is the sale month.
     let saleEventThisMonth = null;
     if (dropoutMortgagePendingSale && month === dropoutSaleMonth) {
-      const monthsPaid        = month - mortgageStartMonth[dropoutIdx];
-      const remainingBal      = Math.max(0, remainingBalance(loanPrincipals[dropoutIdx], annualRatePct, termYears, monthsPaid));
-      const proceeds          = salePrice - remainingBal;
-      fundBalance            += proceeds;
+      const startMonth   = mortgageStartMonth[dropoutIdx] ?? housedAtMonth[dropoutIdx];
+      const monthsPaid   = month - startMonth;
+      const remainingBal = Math.max(0, remainingBalance(loanPrincipals[dropoutIdx], annualRatePct, termYears, monthsPaid));
+      const proceeds     = salePrice - remainingBal;
+      fundBalance       += proceeds;
       dropoutMortgagePendingSale = false;
-      mortgageCount--;
+      if (mortgageStartMonth[dropoutIdx] !== null) mortgageCount--;
 
       saleEventThisMonth = {
         memberIndex:      dropoutIdx,
@@ -1102,13 +1335,13 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
       };
     }
 
-    // Check if fund can buy the next house (skipping dropout member if pre-move-in excluded).
+    // Check if fund can buy the next Phase-B house.
     let housePurchased = null;
-    const nextIdx = nextHousingIndex();
+    const nextIdx = nextBHousingIndex();
     if (nextIdx >= 0 && fundBalance >= purchaseTargets[nextIdx]) {
-      fundBalance            -= purchaseTargets[nextIdx];
-      housedAtMonth[nextIdx]      = month;
-      mortgageStartMonth[nextIdx] = month;
+      fundBalance                 -= purchaseTargets[nextIdx];
+      housedAtMonth[nextIdx]       = month;
+      mortgageStartMonth[nextIdx]  = month;
       housePurchased = {
         position:             nextIdx + 1,
         outright:             false,
@@ -1138,39 +1371,34 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
       fundBalanceStart,
       fundBalanceAfterGrowth,
       fundBalanceEnd:       fundBalance,
-      fundTarget:           nextHousingIndex() >= 0 ? purchaseTargets[nextHousingIndex()] : null,
+      fundTarget:           nextBHousingIndex() >= 0 ? purchaseTargets[nextBHousingIndex()] : null,
       housePurchased,
       mortgageDetails:      null,
       surplus:              0,
     };
 
-    if (dropoutEventThisMonth)  entry.dropoutEvent = dropoutEventThisMonth;
-    if (saleEventThisMonth)     entry.saleEvent    = saleEventThisMonth;
+    if (dropoutEventThisMonth) entry.dropoutEvent = dropoutEventThisMonth;
+    if (saleEventThisMonth)    entry.saleEvent    = saleEventThisMonth;
 
     ledger.push(entry);
   }
 
-  // ── Phase B2: pay off all remaining active mortgages ─────────────────────────
+  // ── Phase B2: pay off all remaining active Phase-B mortgages ─────────────────
 
-  // Compute starting balances for all non-dropout, non-sold mortgages.
-  // (Dropout mortgage balance is 0 because it was sold or never opened.)
+  // Compute starting balances for Phase-B mortgages. Dropout member's mortgage
+  // is 0 (sold or never opened in Phase B).
   let balances = mortgageStartMonth.map((startMonth, k) => {
     if (startMonth === null) return 0;
     if (k === dropoutIdx) return 0;
     return Math.max(0, remainingBalance(loanPrincipals[k], annualRatePct, termYears, month - startMonth));
   });
 
-  // Apply any surplus fund balance carried over from phase B1.
+  // Apply any surplus fund balance carried over from Phase B1.
   if (fundBalance > 0) {
     const result = applyExtraPayment(balances, fundBalance);
     balances    = result.updatedBalances;
     fundBalance = 0;
   }
-
-  // Determine which members are still contributing C2 in phase B2.
-  // All non-dropout housed members pay C2.
-  // The dropout member does NOT contribute.
-  const activeContributors = Array.from({ length: N }, (_, k) => k !== dropoutIdx);
 
   while (balances.some(b => b > 0)) {
     if (month >= MAX_MONTHS) {
@@ -1179,33 +1407,30 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
 
     const activeMortgages = balances.filter(b => b > 0).length;
 
-    // Income: only active contributors (all except dropout member) pay C2.
-    const c2Income    = activeContributors.filter(a => a).length * c2;
+    // Income: contributing members only (dropout excluded).
+    const c2Income    = contributing.filter(c => c).length * c2;
     const totalIncome = c2Income + monthlyDonorContrib;
 
-    // Housing costs: all housed members except the dropout (whose house was sold).
+    // Housing costs: all housed members except the dropout.
     const totalHousingCosts = housingCostsList.reduce((sum, cost, k) => {
-      if (k === dropoutIdx) return sum;
+      if (!contributing[k] && k === dropoutIdx) return sum;
       if (housedAtMonth[k] === null) return sum;
       return sum + cost;
     }, 0);
 
-    // Obligations: standard payment for each mortgage still carrying a balance.
     const totalObligations = balances.reduce((sum, b, k) =>
       b > 0 ? sum + mortgagePayments[k] : sum, 0
     );
 
     const surplus = Math.max(0, totalIncome - totalHousingCosts - totalObligations);
 
-    // Accumulate totalPaid for active contributors.
     for (let k = 0; k < N; k++) {
-      if (!activeContributors[k]) continue;
+      if (!contributing[k]) continue;
       totalPaid[k] += c2;
     }
 
     month++;
 
-    // Apply per-mortgage standard amortization.
     const mortgageDetails = balances.map((b, i) => {
       if (b <= 0) {
         return { position: i + 1, balanceBefore: 0, interestCharged: 0, principalFromPayment: 0, extraPrincipal: 0, balanceAfter: 0 };
@@ -1224,7 +1449,6 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
 
     balances = mortgageDetails.map(d => d.balanceAfter);
 
-    // Apply surplus to highest remaining balance.
     if (surplus > 0) {
       const result = applyExtraPayment(balances, surplus);
       if (result.targetIndex >= 0) {
@@ -1237,7 +1461,7 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
     ledger.push({
       month,
       phase: 2,
-      postHouseMembers: activeContributors.filter(a => a).length,
+      postHouseMembers: contributing.filter(c => c).length,
       preHouseMembers:  0,
       c2Income,
       c1Income:         0,
@@ -1261,7 +1485,6 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
 
   const totalMonths = month;
 
-  // Compute per-position traditional comparisons.
   const tradPerPosition = homePrices.map((p, k) => {
     const path  = traditionalPath(p, 0.20, c1, annualRatePct, termYears, fundYieldPct, housingCostsList[k], closingCostsList[k]);
     const accel = traditionalAcceleratedPath(p, c1, c2, annualRatePct, termYears, fundYieldPct, housingCostsList[k], closingCostsList[k]);
@@ -1269,13 +1492,14 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
   });
 
   const positions = housedAtMonth.map((housedMonth, k) => {
-    const paid = Math.round(totalPaid[k]);
-    const isDropoutMember = k === dropoutIdx && dropoutEventApplied;
+    const paid            = Math.round(totalPaid[k]);
+    const isDropoutMember = k === dropoutIdx && dropoutApplied;
     return {
-      position:          k + 1,
-      monthsUntilHoused: isDropoutMember ? null : housedMonth,
-      totalPaid:         paid,
+      position:           k + 1,
+      monthsUntilHoused:  isDropoutMember ? null : housedMonth,
+      totalPaid:          paid,
       savedVsTraditional: isDropoutMember ? null : Math.round(tradPerPosition[k].path.totalPaid - paid),
+      dropoutExitMonth:   isDropoutMember ? dropoutMonth : null,
     };
   });
 
@@ -1293,7 +1517,7 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
       },
     })),
     ledger,
-    sequentialCount: 0,
+    sequentialCount,
     dropout,
     error: null,
   };
