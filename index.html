@@ -632,65 +632,9 @@
         return months > 0 ? Math.round(cost50yr(pos, positionIndex, modelTotalMonths) / months) : 0;
       }
 
-      // Builds the dropout 4th sub-line HTML for a non-Traditional cell.
-      // modelK: the K value (0..N) for this column's dropout result.
-      // positionIndex: the row's member index.
-      // baselinePos: position data from this column's baseline (non-dropout) result.
-      function dropoutSubLine(modelK, positionIndex, baselinePos, baselineTotalMonths) {
-        if (!dropoutResults) return "";
-        const dr = dropoutResults[modelK];
-        if (!dr || dr.error) return "";
-
-        const dropoutPos = dr.positions[positionIndex];
-
-        // Dropout member's own row: show exit month and amount paid.
-        if (positionIndex === dropoutMemberIdx) {
-          const exitMonth = dr.dropout.month;
-          const paidAtExit = dropoutPos.totalPaid;
-          return `<span class="ledger-sub">dropout: exited mo.&nbsp;${exitMonth} / ${formatDollars(paidAtExit)}</span>`;
-        }
-
-        // Other members: show their outcome in the dropout scenario vs the baseline.
-        // Color the whole sub-line based on the months comparison (primary) or
-        // paid comparison (secondary when months are equal).
-        if (dropoutPos.monthsUntilHoused === null) return "";
-        const dropoutMonths = dropoutPos.monthsUntilHoused;
-        const dropoutPaid   = dropoutPos.totalPaid;
-        const baseMonths    = baselinePos.monthsUntilHoused;
-        const basePaid      = baselinePos.totalPaid;
-
-        let cls = "";
-        if (dropoutMonths < baseMonths)      cls = "cmp-better";
-        else if (dropoutMonths > baseMonths) cls = "cmp-worse";
-        else if (dropoutPaid < basePaid)     cls = "cmp-better";
-        else if (dropoutPaid > basePaid)     cls = "cmp-worse";
-
-        return `<span class="ledger-sub ${cls}">dropout: ${formatMonths(dropoutMonths)} / ${formatDollars(dropoutPaid)}</span>`;
-      }
-
-      // Builds the dropout 4th sub-line for the group total row.
-      // Excludes the dropout member from the comparison.
-      function dropoutGroupSubLine(modelK, baselinePositions, baselineTotalMonths) {
-        if (!dropoutResults) return "";
-        const dr = dropoutResults[modelK];
-        if (!dr || dr.error) return "";
-
-        // Remaining positions (exclude dropout member).
-        const drPositions   = dr.positions.filter((_, i) => i !== dropoutMemberIdx);
-        const basePositions = baselinePositions.filter((_, i) => i !== dropoutMemberIdx);
-
-        const drGroupPaid   = drPositions.reduce((s, p) => s + p.totalPaid, 0);
-        const baseGroupPaid = basePositions.reduce((s, p) => s + p.totalPaid, 0);
-
-        const pCls = drGroupPaid < baseGroupPaid ? "cmp-better" : drGroupPaid > baseGroupPaid ? "cmp-worse" : "";
-        const pStr = pCls
-          ? `<span class="${pCls}">${formatDollars(drGroupPaid)}</span>`
-          : formatDollars(drGroupPaid);
-        return `<span class="ledger-sub">dropout: ${pStr} group total</span>`;
-      }
-
       // Member rows: months until housed / total paid / cost per month housed (50yr window).
-      // Colors vs Traditional. Non-Traditional cells append a dropout 4th sub-line.
+      // Colors vs Traditional. When dropout is active, dropout numbers are the headline and
+      // the baseline appears as a comparison sub-line.
       function tableRows() {
         return Array.from({ length: N }, (_, i) => {
           const tradPos  = tradResult.positions[i];
@@ -698,17 +642,39 @@
           const cells = allModelsWithTrad.map(m => {
             const pos    = m.result.positions[i];
             const isTrad = m.type === "traditional-standard" || m.type === "traditional-accel";
+            const dr     = (!isTrad && dropoutResults) ? dropoutResults[m.k] : null;
+            const drPos  = dr && !dr.error ? dr.positions[i] : null;
 
+            // Dropout member's cell: show exit info as headline.
+            if (drPos && i === dropoutMemberIdx) {
+              return `<td><span>Exited mo.&nbsp;${dr.dropout.month}</span><span class="ledger-sub">${formatDollars(drPos.totalPaid)} paid</span></td>`;
+            }
+
+            // Non-dropout member with active dropout: dropout numbers are headline, baseline is sub-line.
+            if (drPos && drPos.monthsUntilHoused !== null) {
+              const drRate = rate50yr(drPos, i, dr.totalMonths);
+              const mCls = drPos.monthsUntilHoused < tradPos.monthsUntilHoused ? "cmp-better"
+                         : drPos.monthsUntilHoused > tradPos.monthsUntilHoused ? "cmp-worse" : "";
+              const pCls = drPos.totalPaid < tradPos.totalPaid ? "cmp-better"
+                         : drPos.totalPaid > tradPos.totalPaid ? "cmp-worse" : "";
+              const rCls = drRate < tradRate ? "cmp-better" : drRate > tradRate ? "cmp-worse" : "";
+              const bsMonths = pos.monthsUntilHoused;
+              const bsPaid   = pos.totalPaid;
+              const bsCls = drPos.monthsUntilHoused < bsMonths ? "cmp-better"
+                          : drPos.monthsUntilHoused > bsMonths ? "cmp-worse"
+                          : drPos.totalPaid < bsPaid ? "cmp-better"
+                          : drPos.totalPaid > bsPaid ? "cmp-worse" : "";
+              return `<td><span class="${mCls}">${formatMonths(drPos.monthsUntilHoused)}</span><span class="ledger-sub ${pCls}">${formatDollars(drPos.totalPaid)}</span><span class="ledger-sub ${rCls}">${formatDollars(drRate)}/mo housed (first ${windowLabel})</span><span class="ledger-sub ${bsCls}">baseline: ${formatMonths(bsMonths)} / ${formatDollars(bsPaid)}</span></td>`;
+            }
+
+            // Default: no dropout active, or dropout unavailable, or traditional column.
             const rate = rate50yr(pos, i, m.result.totalMonths);
             const mCls = isTrad ? "" : pos.monthsUntilHoused < tradPos.monthsUntilHoused ? "cmp-better"
                                      : pos.monthsUntilHoused > tradPos.monthsUntilHoused ? "cmp-worse" : "";
             const pCls = isTrad ? "" : pos.totalPaid < tradPos.totalPaid ? "cmp-better"
                                      : pos.totalPaid > tradPos.totalPaid ? "cmp-worse" : "";
             const rCls = isTrad ? "" : rate < tradRate ? "cmp-better" : rate > tradRate ? "cmp-worse" : "";
-
-            const dropoutLine = isTrad ? "" : dropoutSubLine(m.k, i, pos, m.result.totalMonths);
-
-            return `<td><span class="${mCls}">${formatMonths(pos.monthsUntilHoused)}</span><span class="ledger-sub ${pCls}">${formatDollars(pos.totalPaid)}</span><span class="ledger-sub ${rCls}">${formatDollars(rate)}/mo housed (first ${windowLabel})</span>${dropoutLine}</td>`;
+            return `<td><span class="${mCls}">${formatMonths(pos.monthsUntilHoused)}</span><span class="ledger-sub ${pCls}">${formatDollars(pos.totalPaid)}</span><span class="ledger-sub ${rCls}">${formatDollars(rate)}/mo housed (first ${windowLabel})</span></td>`;
           }).join("");
           return `<tr><td class="tbl-pos">Position ${i + 1}</td>${cells}</tr>`;
         }).join("");
@@ -730,16 +696,32 @@
           const pm50      = m.result.positions.reduce((s, p) => s + (WINDOW - (p.monthsUntilHoused || 0)), 0);
           const rate      = pm50 > 0 ? Math.round(paid50 / pm50) : 0;
           const isTrad    = m.type === "traditional-standard" || m.type === "traditional-accel";
+          const dr        = (!isTrad && dropoutResults) ? dropoutResults[m.k] : null;
+          const drValid   = dr && !dr.error;
+
+          if (drValid) {
+            // Dropout active: remaining members' totals are headline, baseline is sub-line.
+            const drRem      = dr.positions.filter((_, i) => i !== dropoutMemberIdx);
+            const bsRem      = m.result.positions.filter((_, i) => i !== dropoutMemberIdx);
+            const tradRem    = tradResult.positions.filter((_, i) => i !== dropoutMemberIdx);
+            const drPaid     = drRem.reduce((s, p) => s + p.totalPaid, 0);
+            const bsPaid     = bsRem.reduce((s, p) => s + p.totalPaid, 0);
+            const tradRemPaid = tradRem.reduce((s, p) => s + p.totalPaid, 0);
+            const mCls = dr.totalMonths < tradTotal ? "cmp-better" : dr.totalMonths > tradTotal ? "cmp-worse" : "";
+            const pCls = drPaid < tradRemPaid ? "cmp-better" : drPaid > tradRemPaid ? "cmp-worse" : "";
+            const bsCls = drPaid < bsPaid ? "cmp-better" : drPaid > bsPaid ? "cmp-worse" : "";
+            return `<td><span class="${mCls}">${formatMonths(dr.totalMonths)}</span><span class="ledger-sub ${pCls}">${formatDollars(drPaid)} remaining</span><span class="ledger-sub ${bsCls}">baseline: ${formatMonths(v)} / ${formatDollars(groupPaid)}</span></td>`;
+          }
+
           const mCls = isTrad ? "" : v < tradTotal ? "cmp-better" : v > tradTotal ? "cmp-worse" : "";
           const pCls = isTrad ? "" : groupPaid < tradTotalPaid ? "cmp-better" : groupPaid > tradTotalPaid ? "cmp-worse" : "";
           const rCls = isTrad ? "" : rate < tradGroupRate ? "cmp-better" : rate > tradGroupRate ? "cmp-worse" : "";
-          const dropoutLine = isTrad ? "" : dropoutGroupSubLine(m.k, m.result.positions, v);
-          return `<td><span class="${mCls}">${formatMonths(v)}</span><span class="ledger-sub ${pCls}">${formatDollars(groupPaid)}</span><span class="ledger-sub ${rCls}">${formatDollars(rate)}/mo housed (first ${windowLabel})</span>${dropoutLine}</td>`;
+          return `<td><span class="${mCls}">${formatMonths(v)}</span><span class="ledger-sub ${pCls}">${formatDollars(groupPaid)}</span><span class="ledger-sub ${rCls}">${formatDollars(rate)}/mo housed (first ${windowLabel})</span></td>`;
         }).join("")
       }</tr>`;
 
       const dropoutNote = (dropoutResults && firstValidDropout)
-        ? `<br><strong>Dropout sub-line</strong> (4th line in each group cell): outcome for that member/group if Member&nbsp;${dropoutMemberIdx + 1} exits at month&nbsp;${firstValidDropout.dropout.month}. Color compares to that model's baseline.`
+        ? `<br><strong>Dropout scenario</strong>: Member&nbsp;${dropoutMemberIdx + 1} exits at month&nbsp;${firstValidDropout.dropout.month}. Each non-traditional cell shows the dropout-scenario outcome; sub-line shows baseline for comparison.`
         : "";
 
       el.innerHTML = `
@@ -749,7 +731,7 @@
           "Seq. K" means the first K mortgages are paid off completely before switching to parallel for the rest.
           "Traditional (same payments)" is the traditional path but paying your post-move-in amount each month instead of the standard payment.${dropoutNote}
         </p>
-        <p class="calc-note" style="font-size:0.75rem;margin-bottom:1rem">Each cell: months until housed / total paid / cost per month housed (first ${windowLabel})${dropoutResults ? " / dropout outcome" : ""}</p>
+        <p class="calc-note" style="font-size:0.75rem;margin-bottom:1rem">Each cell: months until housed / total paid / cost per month housed (first ${windowLabel})${dropoutResults ? " (dropout scenario; sub-line = baseline)" : ""}</p>
 
         <div class="tbl-wrapper">
           <table class="results-table">
@@ -1133,18 +1115,22 @@
       syncDropoutSalePrice();
     }
 
-    // Populates the dropout member select with one option per group member.
+    // Populates the dropout member select with "No one" default + one option per group member.
     function populateDropoutMemberSelect(groupSize) {
       var select = document.getElementById("dropout-member");
       var previousValue = select.value;
       select.innerHTML = "";
+      var noneOpt = document.createElement("option");
+      noneOpt.value = "";
+      noneOpt.textContent = "No one";
+      select.appendChild(noneOpt);
       for (var i = 1; i <= groupSize; i++) {
         var option = document.createElement("option");
         option.value       = i - 1; // 0-based index
         option.textContent = "Member " + i;
         select.appendChild(option);
       }
-      // Preserve the previously selected member if still valid.
+      // Preserve a previously selected member if still valid; otherwise default to "No one".
       if (previousValue !== "" && parseInt(previousValue) < groupSize) {
         select.value = previousValue;
       }
