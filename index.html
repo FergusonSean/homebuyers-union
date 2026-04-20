@@ -226,7 +226,6 @@
 
       <div id="ledger-area"></div>
 
-      <div id="dropout-results"></div>
     </div>
   </section>
 
@@ -551,7 +550,7 @@
     // models: array of N+1 results from calculateGroup(inputs, 0..N)
     // sequential: result from calculateGroupSequential(inputs)
 
-    function renderComparison(models, inputs) {
+    function renderComparison(models, inputs, dropoutResult) {
       const el         = document.getElementById("calc-results");
       const ledgerArea = document.getElementById("ledger-area");
       const N          = inputs.groupSize;
@@ -597,11 +596,21 @@
         error: null,
         ledger: accelLedgerData.ledger,
       };
+      const dropoutModel = (dropoutResult && !dropoutResult.error) ? {
+        key:    "dropout",
+        label:  "Parallel + dropout (M" + (dropoutResult.dropout.memberIndex + 1) + " mo." + dropoutResult.dropout.month + ")",
+        result: dropoutResult,
+        type:   "dropout",
+      } : null;
+
       const allModelsWithTrad = [
         ...allModels,
+        ...(dropoutModel ? [dropoutModel] : []),
         { key: "traditional",       label: "Traditional",             result: tradResult,      type: "traditional-standard" },
         { key: "traditional-accel", label: "Traditional (same payments)", result: tradAccelResult, type: "traditional-accel" },
       ];
+
+      const dropoutIdx = dropoutModel ? dropoutResult.dropout.memberIndex : -1;
 
       const headerCells = allModelsWithTrad.map(m => `<th>${m.label}</th>`).join("");
 
@@ -622,12 +631,33 @@
       // Combined rows: months until housed / total paid / cost per month housed (50yr window).
       // Colors are relative to the Traditional column: green = better, red = worse.
       function tableRows() {
+        const parallelPos = models[0].positions;
         return Array.from({ length: N }, (_, i) => {
-          const tradPos  = tradResult.positions[i];
-          const tradRate = rate50yr(tradPos, i, tradResult.totalMonths);
+          const tradPos    = tradResult.positions[i];
+          const tradRate   = rate50yr(tradPos, i, tradResult.totalMonths);
+          const parallelP  = parallelPos[i];
           const cells = allModelsWithTrad.map(m => {
             const pos    = m.result.positions[i];
             const isTrad = m.type === "traditional-standard" || m.type === "traditional-accel";
+
+            // Dropout member cell: show exit info, no green/red
+            if (m.type === "dropout" && i === dropoutIdx) {
+              return `<td><span>Exited mo.&nbsp;${dropoutResult.dropout.month}</span><span class="ledger-sub">${formatDollars(pos.totalPaid)} paid</span></td>`;
+            }
+
+            // Dropout column for non-dropout members: color vs parallel baseline
+            if (m.type === "dropout") {
+              const basePos  = parallelP;
+              const rate     = pos.monthsUntilHoused !== null ? rate50yr(pos, i, m.result.totalMonths) : 0;
+              const baseRate = rate50yr(basePos, i, models[0].totalMonths);
+              const mCls = pos.monthsUntilHoused < basePos.monthsUntilHoused ? "cmp-better"
+                         : pos.monthsUntilHoused > basePos.monthsUntilHoused ? "cmp-worse" : "";
+              const pCls = pos.totalPaid < basePos.totalPaid ? "cmp-better"
+                         : pos.totalPaid > basePos.totalPaid ? "cmp-worse" : "";
+              const rCls = rate < baseRate ? "cmp-better" : rate > baseRate ? "cmp-worse" : "";
+              return `<td><span class="${mCls}">${formatMonths(pos.monthsUntilHoused)}</span><span class="ledger-sub ${pCls}">${formatDollars(pos.totalPaid)}</span><span class="ledger-sub ${rCls}">${formatDollars(rate)}/mo housed (first ${windowLabel})</span></td>`;
+            }
+
             const rate   = rate50yr(pos, i, m.result.totalMonths);
             const mCls = isTrad ? "" : pos.monthsUntilHoused < tradPos.monthsUntilHoused ? "cmp-better"
                                      : pos.monthsUntilHoused > tradPos.monthsUntilHoused ? "cmp-worse" : "";
@@ -651,16 +681,28 @@
       const totalRow  = `<tr class="tbl-total"><td class="tbl-pos"><em>Group total</em></td>${
         allModelsWithTrad.map(m => {
           const v         = m.result.totalMonths;
-          const groupPaid = m.result.positions.reduce((s, p) => s + p.totalPaid, 0);
-          const paid50    = m.result.positions.reduce((s, p, i) => s + cost50yr(p, i, v), 0);
-          const pm50      = m.result.positions.reduce((s, p) => s + (WINDOW - p.monthsUntilHoused), 0);
+          // For the dropout column, exclude the dropout member from group totals
+          const positions = m.type === "dropout"
+            ? m.result.positions.filter((_, i) => i !== dropoutIdx)
+            : m.result.positions;
+          const groupPaid = positions.reduce((s, p) => s + p.totalPaid, 0);
+          const paid50    = positions.reduce((s, p, i) => {
+            const origIdx = m.type === "dropout" && i >= dropoutIdx ? i + 1 : i;
+            return s + cost50yr(p, origIdx, v);
+          }, 0);
+          const pm50      = positions.reduce((s, p) => s + (WINDOW - (p.monthsUntilHoused || 0)), 0);
           const rate      = pm50 > 0 ? Math.round(paid50 / pm50) : 0;
-          const mCls = m.type === "traditional-standard" || m.type === "traditional-accel" ? ""
-                     : v < tradTotal ? "cmp-better" : v > tradTotal ? "cmp-worse" : "";
-          const pCls = m.type === "traditional-standard" || m.type === "traditional-accel" ? ""
-                     : groupPaid < tradTotalPaid ? "cmp-better" : groupPaid > tradTotalPaid ? "cmp-worse" : "";
-          const rCls = m.type === "traditional-standard" || m.type === "traditional-accel" ? ""
-                     : rate < tradGroupRate ? "cmp-better" : rate > tradGroupRate ? "cmp-worse" : "";
+          const isTrad    = m.type === "traditional-standard" || m.type === "traditional-accel";
+          const baseGrpPaid = m.type === "dropout" ? models[0].positions.filter((_, i) => i !== dropoutIdx).reduce((s, p) => s + p.totalPaid, 0) : tradTotalPaid;
+          const baseGrpRate = m.type === "dropout" ? (() => {
+            const bp = models[0].positions.filter((_, i) => i !== dropoutIdx);
+            const bpaid = bp.reduce((s, p, i) => { const oi = i >= dropoutIdx ? i+1 : i; return s + cost50yr(p, oi, models[0].totalMonths); }, 0);
+            const bpm  = bp.reduce((s, p) => s + (WINDOW - p.monthsUntilHoused), 0);
+            return bpm > 0 ? Math.round(bpaid / bpm) : 0;
+          })() : tradGroupRate;
+          const mCls = isTrad ? "" : v < tradTotal ? "cmp-better" : v > tradTotal ? "cmp-worse" : "";
+          const pCls = isTrad ? "" : groupPaid < baseGrpPaid ? "cmp-better" : groupPaid > baseGrpPaid ? "cmp-worse" : "";
+          const rCls = isTrad ? "" : rate < baseGrpRate ? "cmp-better" : rate > baseGrpRate ? "cmp-worse" : "";
           return `<td><span class="${mCls}">${formatMonths(v)}</span><span class="ledger-sub ${pCls}">${formatDollars(groupPaid)}</span><span class="ledger-sub ${rCls}">${formatDollars(rate)}/mo housed (first ${windowLabel})</span></td>`;
         }).join("")
       }</tr>`;
@@ -1006,10 +1048,23 @@
         return;
       }
 
-      renderComparison(models, inputs);
+      // Compute dropout scenario if inputs are set.
+      let dropoutResult = null;
+      const dropoutMemberEl = document.getElementById("dropout-member");
+      const dropoutMonthEl  = document.getElementById("dropout-month");
+      if (dropoutMemberEl && dropoutMonthEl) {
+        const dMemberIdx = parseInt(dropoutMemberEl.value);
+        const dMonth     = parseInt(dropoutMonthEl.value);
+        const dSalePrice = parseFloat(document.getElementById("dropout-sale-price").value) || 0;
+        if (!isNaN(dMemberIdx) && !isNaN(dMonth) && dMonth >= 1) {
+          dropoutResult = calculateGroupWithDropout(inputs, 0, { memberIndex: dMemberIdx, month: dMonth, salePrice: dSalePrice });
+        }
+      }
 
-      // Sync the dropout form with the freshly computed inputs and base result.
-      dropoutSyncAfterCalculation(inputs, models[0]);
+      renderComparison(models, inputs, dropoutResult);
+
+      // Sync the dropout member select after a group-size change.
+      dropoutSyncAfterCalculation(inputs);
     }
 
     // Wire up inputs that should trigger renderMemberPriceInputs in addition to runCalculation.
@@ -1032,17 +1087,14 @@
 
     // ── Dropout scenario wiring ──────────────────────────────────────────
 
-    // Stores the most recent inputs and parallel (K=0) result for use in dropout runs.
+    // Stores the most recent inputs for dropout select syncing.
     var _lastDropoutInputs = null;
-    var _lastBaseResult    = null;
 
-    // Called at the end of runCalculation — syncs the dropout fieldset and re-runs the scenario.
-    function dropoutSyncAfterCalculation(inputs, baseResult) {
+    // Called at the end of runCalculation — keeps the dropout member select in sync.
+    function dropoutSyncAfterCalculation(inputs) {
       _lastDropoutInputs = inputs;
-      _lastBaseResult    = baseResult;
       populateDropoutMemberSelect(inputs.groupSize);
       syncDropoutSalePrice();
-      runDropoutScenario();
     }
 
     // Populates the dropout member select with one option per group member.
@@ -1071,142 +1123,10 @@
       document.getElementById("dropout-sale-price").value = memberPrice;
     }
 
-    // Renders the dropout scenario results: event summary and comparison table.
-    function renderDropoutResults(baseResult, dropoutResult, inputs) {
-      var container = document.getElementById("dropout-results");
-
-      if (dropoutResult.error) {
-        container.innerHTML = '<p class="calc-error">' + dropoutResult.error + "</p>";
-        return;
-      }
-
-      var dropout      = dropoutResult.dropout;
-      var dropoutIdx   = dropout.memberIndex;
-      var dropoutEvent = dropoutResult.ledger.find(function (e) { return e.dropoutEvent; });
-      var saleEvent    = dropoutResult.ledger.find(function (e) { return e.saleEvent; });
-
-      // Build the event summary block.
-      var summaryHtml = "";
-      if (dropoutEvent) {
-        var ev = dropoutEvent.dropoutEvent;
-        if (ev.type === "pre-move-in") {
-          summaryHtml =
-            '<div class="dropout-event-summary">' +
-            "<strong>Pre-move-in dropout (month " + dropout.month + ")</strong>" +
-            "Member " + (dropoutIdx + 1) + " had not yet been housed. The fund refunded their C1 contributions: " +
-            "<strong>" + formatDollars(ev.c1Refund) + "</strong> withdrawn from the fund balance. " +
-            "Their home position is permanently skipped \u2014 the group continues with " + (inputs.groupSize - 1) + " members." +
-            "</div>";
-        } else {
-          var proceedsSign = saleEvent && saleEvent.saleEvent.proceeds >= 0 ? "+" : "";
-          var proceedsText = saleEvent
-            ? proceedsSign + formatDollars(Math.abs(saleEvent.saleEvent.proceeds)) + " " +
-              (saleEvent.saleEvent.proceeds >= 0 ? "returned to" : "absorbed by") +
-              " fund at month " + saleEvent.month +
-              " (sale price " + formatDollars(dropout.salePrice) +
-              " &minus; remaining balance " + formatDollars(saleEvent.saleEvent.remainingBalance) + ")"
-            : "(sale pending)";
-          summaryHtml =
-            '<div class="dropout-event-summary">' +
-            "<strong>Post-move-in dropout (month " + dropout.month + ")</strong>" +
-            "Member " + (dropoutIdx + 1) + " was already housed. They stopped paying C2. " +
-            "The fund serviced their mortgage for 2 more months, then sold the house: " +
-            proceedsText + "." +
-            "</div>";
-        }
-      } else {
-        summaryHtml =
-          '<div class="dropout-event-summary">' +
-          "<strong>Dropout not triggered</strong>" +
-          "The simulation ended before month " + dropout.month + " \u2014 no dropout occurred. " +
-          "All members were housed and mortgages paid off normally." +
-          "</div>";
-      }
-
-      // Build the comparison table: one row per member.
-      var N       = inputs.groupSize;
-      var basePos = baseResult.positions;
-      var droPos  = dropoutResult.positions;
-
-      var headerRow =
-        "<tr>" +
-        "<th>Member</th>" +
-        "<th>Months to move-in (baseline)</th>" +
-        "<th>Months to move-in (dropout scenario)</th>" +
-        "<th>Total paid (baseline)</th>" +
-        "<th>Total paid (dropout scenario)</th>" +
-        "</tr>";
-
-      var dataRows = Array.from({ length: N }, function (_, k) {
-        if (k === dropoutIdx && dropoutEvent) {
-          var paidBefore = formatDollars(droPos[k].totalPaid);
-          var baselineHoused = basePos[k].monthsUntilHoused !== null
-            ? formatMonths(basePos[k].monthsUntilHoused) : "\u2014";
-          return "<tr class=\"dropout-member-row\">" +
-            "<td>Member " + (k + 1) + " (dropout)</td>" +
-            "<td>" + baselineHoused + "</td>" +
-            "<td>Dropped out (month " + dropout.month + ")</td>" +
-            "<td>" + formatDollars(basePos[k].totalPaid) + "</td>" +
-            "<td>" + paidBefore + " paid before dropout</td>" +
-            "</tr>";
-        }
-
-        var baseM = basePos[k].monthsUntilHoused;
-        var droM  = droPos[k].monthsUntilHoused;
-        var baseP = basePos[k].totalPaid;
-        var droP  = droPos[k].totalPaid;
-
-        var mCls = (droM !== null && baseM !== null)
-          ? (droM < baseM ? "cmp-better" : droM > baseM ? "cmp-worse" : "")
-          : "";
-        var pCls = droP < baseP ? "cmp-better" : droP > baseP ? "cmp-worse" : "";
-
-        var mBase = baseM !== null ? formatMonths(baseM) : "\u2014";
-        var mDro  = droM  !== null ? formatMonths(droM)  : "not housed";
-
-        return "<tr>" +
-          "<td>Member " + (k + 1) + "</td>" +
-          "<td>" + mBase + "</td>" +
-          "<td><span class=\"" + mCls + "\">" + mDro + "</span></td>" +
-          "<td>" + formatDollars(baseP) + "</td>" +
-          "<td><span class=\"" + pCls + "\">" + formatDollars(droP) + "</span></td>" +
-          "</tr>";
-      }).join("");
-
-      container.innerHTML =
-        summaryHtml +
-        '<p class="calc-note" style="margin-bottom:0.5rem">' +
-        '<span class="cmp-better-key">Green</span> = improved vs baseline. ' +
-        '<span class="cmp-worse-key">Red</span> = worse vs baseline.' +
-        "</p>" +
-        '<div class="dropout-results-wrap">' +
-        '<table class="dropout-comparison-table">' +
-        "<thead>" + headerRow + "</thead>" +
-        "<tbody>" + dataRows + "</tbody>" +
-        "</table>" +
-        "</div>";
-    }
-
-    function runDropoutScenario() {
-      if (!_lastDropoutInputs || !_lastBaseResult) return;
-      var memberIdx = parseInt(document.getElementById("dropout-member").value);
-      var month     = parseInt(document.getElementById("dropout-month").value);
-      var salePrice = parseFloat(document.getElementById("dropout-sale-price").value) || 0;
-      if (isNaN(memberIdx) || isNaN(month) || month < 1) {
-        document.getElementById("dropout-results").innerHTML = "";
-        return;
-      }
-      var dropout = { memberIndex: memberIdx, month: month, salePrice: salePrice };
-      var result  = calculateGroupWithDropout(_lastDropoutInputs, 0, dropout);
-      renderDropoutResults(_lastBaseResult, result, _lastDropoutInputs);
-    }
-
     document.getElementById("dropout-member").addEventListener("change", function () {
       syncDropoutSalePrice();
-      runDropoutScenario();
+      runCalculation();
     });
-    document.getElementById("dropout-month").addEventListener("input", runDropoutScenario);
-    document.getElementById("dropout-sale-price").addEventListener("input", runDropoutScenario);
 
     renderMemberPriceInputs();
     runCalculation();
