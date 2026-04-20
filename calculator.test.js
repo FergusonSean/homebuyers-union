@@ -113,11 +113,11 @@ if (result.positions) {
   // In a group of 3 with these inputs, positions 2 and 3 save significantly.
   assert(
     "position 2 pays less than traditional path",
-    result.positions[1].totalPaid < result.traditional.totalPaid
+    result.positions[1].totalPaid < result.traditional[1].totalPaid
   );
   assert(
     "position 3 pays less than traditional path",
-    result.positions[2].totalPaid < result.traditional.totalPaid
+    result.positions[2].totalPaid < result.traditional[2].totalPaid
   );
   assert(
     "position 2 savedVsTraditional is positive",
@@ -127,10 +127,10 @@ if (result.positions) {
     "position 3 savedVsTraditional is positive",
     result.positions[2].savedVsTraditional > 0
   );
-  // savedVsTraditional correctly reflects totalPaid vs traditional.
+  // savedVsTraditional correctly reflects totalPaid vs traditional (per position).
   assert(
     "position 1 savedVsTraditional equals traditional minus totalPaid",
-    result.positions[0].savedVsTraditional === result.traditional.totalPaid - result.positions[0].totalPaid
+    result.positions[0].savedVsTraditional === result.traditional[0].totalPaid - result.positions[0].totalPaid
   );
 }
 

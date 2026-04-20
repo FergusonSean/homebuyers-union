@@ -127,6 +127,10 @@
               <input class="calc-input" type="number" id="downPaymentPct" name="downPaymentPct" min="3" max="50" step="1" value="20">
             </div>
             <div class="calc-field">
+              <label class="calc-label" for="closingCostsPct">Closing costs (% of price)</label>
+              <input class="calc-input" type="number" id="closingCostsPct" name="closingCostsPct" min="0" max="10" step="0.1" value="3">
+            </div>
+            <div class="calc-field">
               <label class="calc-label" for="annualRatePct">Mortgage interest rate (%)</label>
               <input class="calc-input" type="number" id="annualRatePct" name="annualRatePct" min="1" max="20" step="0.1" value="7">
             </div>
@@ -141,6 +145,10 @@
             <div class="calc-field">
               <label class="calc-label" for="insuranceMonthly">Home insurance ($/mo)</label>
               <input class="calc-input" type="number" id="insuranceMonthly" name="insuranceMonthly" min="0" max="5000" step="10" value="150">
+            </div>
+            <div class="calc-field">
+              <label class="calc-label" for="maintenancePct">Maintenance (% of home/yr)</label>
+              <input class="calc-input" type="number" id="maintenancePct" name="maintenancePct" min="0" max="5" step="0.1" value="1">
             </div>
           </fieldset>
 
@@ -166,6 +174,11 @@
               <label class="calc-label" for="fundYieldPct">Fund savings yield (% annual)</label>
               <input class="calc-input" type="number" id="fundYieldPct" name="fundYieldPct" min="0" max="10" step="0.1" value="3">
             </div>
+          </fieldset>
+
+          <fieldset class="calc-fieldset" id="member-prices-fieldset">
+            <legend class="calc-legend">Member home prices</legend>
+            <div id="member-prices-list"></div>
           </fieldset>
 
         </form>
@@ -350,14 +363,18 @@
     function renderLedger(result, phaseLabels = {}) {
       const phase1 = result.ledger.filter(e => e.phase === 1);
       const phase2 = result.ledger.filter(e => e.phase === 2);
-      const mortgageStd = phase1[0] ? phase1[0].mortgagePaymentStd : 0;
+
+      // mortgagePaymentStd is null when member home prices differ (variable payments).
+      const mortgageStd = phase1[0] ? phase1[0].mortgagePaymentStd : null;
 
       // ── Phase 1: 6 columns ───────────────────────────────────────────────
       // Each income and obligations cell shows the total on top and the
       // formula breakdown as a small sub-line below.
       const p1Rows = phase1.map(e => {
         const obFormula = e.activeMortgages > 0
-          ? `${e.activeMortgages} mortgage${e.activeMortgages > 1 ? "s" : ""} x ${formatDollars(mortgageStd)}`
+          ? (mortgageStd !== null
+              ? `${e.activeMortgages} mortgage${e.activeMortgages > 1 ? "s" : ""} x ${formatDollars(mortgageStd)}`
+              : `${e.activeMortgages} mortgage${e.activeMortgages > 1 ? "s" : ""} (variable payments)`)
           : "none yet";
         const housingLine = e.housingCosts > 0
           ? `<span class="ledger-sub">&minus;${formatDollars(e.housingCosts)} tax/ins/maint</span>` : "";
@@ -365,7 +382,10 @@
         let balanceCell = `${e.netGrowth >= 0 ? "+" : "-"}${formatDollars(Math.abs(e.netGrowth))} &rarr; ${formatDollars(e.fundBalanceAfterGrowth)}`;
         let eventCell   = "";
         if (e.housePurchased) {
-          balanceCell += `<span class="ledger-sub">-${formatDollars(e.housePurchased.downPaymentWithdrawn)} down payment &rarr; ${formatDollars(e.fundBalanceEnd)}</span>`;
+          const withdrawLabel = e.housePurchased.closingCosts > 0
+            ? `down + closing`
+            : `down payment`;
+          balanceCell += `<span class="ledger-sub">-${formatDollars(e.housePurchased.downPaymentWithdrawn)} ${withdrawLabel} &rarr; ${formatDollars(e.fundBalanceEnd)}</span>`;
           eventCell    = `<strong class="ledger-event">House ${e.housePurchased.position}</strong>`;
         }
 
@@ -383,7 +403,9 @@
       // Mortgage details stack into one cell — one line per mortgage showing
       // before/after balance with interest and principal as a sub-line.
       const p2Rows = phase2.map(e => {
-        const obFormula   = `${e.activeMortgages} x ${formatDollars(mortgageStd)}`;
+        const obFormula = mortgageStd !== null
+          ? `${e.activeMortgages} x ${formatDollars(mortgageStd)}`
+          : `${e.activeMortgages} mortgage${e.activeMortgages !== 1 ? "s" : ""} (variable payments)`;
         const housingLine = e.housingCosts > 0
           ? `<span class="ledger-sub">&minus;${formatDollars(e.housingCosts)} tax/ins/maint</span>` : "";
 
@@ -413,7 +435,9 @@
         <div class="ledger-section">
           <h3 class="ledger-heading">${p1Label}</h3>
           <p class="ledger-formula-key">
-            Standard mortgage payment: ${formatDollars(mortgageStd)}/mo per house owned.
+            ${mortgageStd !== null
+              ? `Standard mortgage payment: ${formatDollars(mortgageStd)}/mo per house owned.`
+              : `Mortgage payments vary by member home price.`}
             Net = (income &minus; tax/ins/maint) &minus; mortgage obligations, added to fund each month.
             Highlighted rows show a house purchase — down payment withdrawn from fund.
           </p>
@@ -503,45 +527,58 @@
       })).filter(m => !m.result.error && m.k !== N - 1);
 
       // Add traditional and accelerated-traditional columns for comparison.
-      // Neither has a ledger so both are excluded from the ledger buttons.
+      // trad is now an array — one entry per position, using each member's home price.
       const trad = models[0].traditional;
+
+      // Per-position housing costs and closing costs (using homePrices array from inputs).
+      const housingCostsForTrad = inputs.homePrices.map(p =>
+        p * ((inputs.propertyTaxPct || 0) / 100 + (inputs.maintenancePct || 1) / 100) / 12 + (inputs.insuranceMonthly || 0)
+      );
+      const closingCostsForTrad = inputs.homePrices.map(p =>
+        p * (inputs.closingCostsPct || 0) / 100
+      );
+
+      // Ledger helpers use position 0's price for display (ledger detail is secondary).
+      const tradLedgerData = traditionalPathLedger(inputs.homePrice, inputs.downPaymentPct, inputs.c1, inputs.annualRatePct, inputs.termYears, inputs.fundYieldPct, housingCostsForTrad[0], closingCostsForTrad[0]);
       const tradResult = {
-        positions: Array.from({ length: N }, () => ({
-          monthsUntilHoused: trad.monthsToSaveDown,
-          totalPaid:         trad.totalPaid,
+        positions: Array.from({ length: N }, (_, i) => ({
+          monthsUntilHoused: trad[i].monthsToSaveDown,
+          totalPaid:         trad[i].totalPaid,
         })),
-        totalMonths: trad.monthsToSaveDown + inputs.termYears * 12,
+        totalMonths: trad[0].monthsToSaveDown + inputs.termYears * 12,
         error: null,
+        ledger: tradLedgerData.ledger,
       };
-      const accel = trad.accelerated;
+      const accelLedgerData = traditionalAcceleratedPathLedger(inputs.homePrice, inputs.c1, inputs.c2, inputs.annualRatePct, inputs.termYears, inputs.fundYieldPct, housingCostsForTrad[0], closingCostsForTrad[0]);
       const tradAccelResult = {
-        positions: Array.from({ length: N }, () => ({
-          monthsUntilHoused: accel.monthsToSaveDown,
-          totalPaid:         accel.totalPaid,
+        positions: Array.from({ length: N }, (_, i) => ({
+          monthsUntilHoused: trad[i].accelerated.monthsToSaveDown,
+          totalPaid:         trad[i].accelerated.totalPaid,
         })),
-        totalMonths: accel.totalMonths,
+        totalMonths: trad[0].accelerated.totalMonths,
         error: null,
+        ledger: accelLedgerData.ledger,
       };
       const allModelsWithTrad = [
         ...allModels,
-        { key: "traditional",       label: "Traditional",    result: tradResult,      type: "traditional" },
-        { key: "traditional-accel", label: "Traditional (same payments)", result: tradAccelResult, type: "traditional" },
+        { key: "traditional",       label: "Traditional",             result: tradResult,      type: "traditional-standard" },
+        { key: "traditional-accel", label: "Traditional (same payments)", result: tradAccelResult, type: "traditional-accel" },
       ];
 
       const headerCells = allModelsWithTrad.map(m => `<th>${m.label}</th>`).join("");
 
-      const WINDOW = 600; // 50 years
-      const housingCostsMonthly = inputs.homePrice * ((inputs.propertyTaxPct || 0) / 100 + 0.01) / 12 + (inputs.insuranceMonthly || 0);
+      const WINDOW      = 600; // 50 years
       const windowLabel = formatMonths(WINDOW); // "50 yr"
 
-      // cost50yr: total paid + housing costs for any months between simulation end and
-      // the 50-year window. After the org dissolves, members pay housing costs out of pocket.
-      function cost50yr(pos, modelTotalMonths) {
+      // cost50yr: total paid + position-specific housing costs for months after simulation ends.
+      // After the org dissolves, each member pays their own housing costs out of pocket.
+      function cost50yr(pos, positionIndex, modelTotalMonths) {
+        const housingCostsMonthly = housingCostsForTrad[positionIndex];
         return pos.totalPaid + Math.max(0, WINDOW - modelTotalMonths) * housingCostsMonthly;
       }
-      function rate50yr(pos, modelTotalMonths) {
+      function rate50yr(pos, positionIndex, modelTotalMonths) {
         const months = WINDOW - pos.monthsUntilHoused;
-        return months > 0 ? Math.round(cost50yr(pos, modelTotalMonths) / months) : 0;
+        return months > 0 ? Math.round(cost50yr(pos, positionIndex, modelTotalMonths) / months) : 0;
       }
 
       // Combined rows: months until housed / total paid / cost per month housed (50yr window).
@@ -549,11 +586,11 @@
       function tableRows() {
         return Array.from({ length: N }, (_, i) => {
           const tradPos  = tradResult.positions[i];
-          const tradRate = rate50yr(tradPos, tradResult.totalMonths);
+          const tradRate = rate50yr(tradPos, i, tradResult.totalMonths);
           const cells = allModelsWithTrad.map(m => {
             const pos    = m.result.positions[i];
-            const isTrad = m.type === "traditional";
-            const rate   = rate50yr(pos, m.result.totalMonths);
+            const isTrad = m.type === "traditional-standard" || m.type === "traditional-accel";
+            const rate   = rate50yr(pos, i, m.result.totalMonths);
             const mCls = isTrad ? "" : pos.monthsUntilHoused < tradPos.monthsUntilHoused ? "cmp-better"
                                      : pos.monthsUntilHoused > tradPos.monthsUntilHoused ? "cmp-worse" : "";
             const pCls = isTrad ? "" : pos.totalPaid < tradPos.totalPaid ? "cmp-better"
@@ -568,7 +605,8 @@
       const tradTotal     = tradResult.totalMonths;
       const tradTotalPaid = tradResult.positions.reduce((s, p) => s + p.totalPaid, 0);
       const tradGroupRate = (() => {
-        const paid = tradTotalPaid + Math.max(0, WINDOW - tradTotal) * N * housingCostsMonthly;
+        const paid = tradResult.positions.reduce((s, p, i) =>
+          s + cost50yr(p, i, tradTotal), 0);
         const pm   = tradResult.positions.reduce((s, p) => s + (WINDOW - p.monthsUntilHoused), 0);
         return pm > 0 ? Math.round(paid / pm) : 0;
       })();
@@ -576,14 +614,14 @@
         allModelsWithTrad.map(m => {
           const v         = m.result.totalMonths;
           const groupPaid = m.result.positions.reduce((s, p) => s + p.totalPaid, 0);
-          const paid50    = groupPaid + Math.max(0, WINDOW - v) * N * housingCostsMonthly;
+          const paid50    = m.result.positions.reduce((s, p, i) => s + cost50yr(p, i, v), 0);
           const pm50      = m.result.positions.reduce((s, p) => s + (WINDOW - p.monthsUntilHoused), 0);
           const rate      = pm50 > 0 ? Math.round(paid50 / pm50) : 0;
-          const mCls = m.type === "traditional" ? ""
+          const mCls = m.type === "traditional-standard" || m.type === "traditional-accel" ? ""
                      : v < tradTotal ? "cmp-better" : v > tradTotal ? "cmp-worse" : "";
-          const pCls = m.type === "traditional" ? ""
+          const pCls = m.type === "traditional-standard" || m.type === "traditional-accel" ? ""
                      : groupPaid < tradTotalPaid ? "cmp-better" : groupPaid > tradTotalPaid ? "cmp-worse" : "";
-          const rCls = m.type === "traditional" ? ""
+          const rCls = m.type === "traditional-standard" || m.type === "traditional-accel" ? ""
                      : rate < tradGroupRate ? "cmp-better" : rate > tradGroupRate ? "cmp-worse" : "";
           return `<td><span class="${mCls}">${formatMonths(v)}</span><span class="ledger-sub ${pCls}">${formatDollars(groupPaid)}</span><span class="ledger-sub ${rCls}">${formatDollars(rate)}/mo housed (first ${windowLabel})</span></td>`;
         }).join("")
@@ -613,16 +651,23 @@
       `;
 
       // Ledger buttons + containers in the full-width area below.
+      // Includes group models and both traditional models.
+      const allLedgerModels = [
+        ...allModels,
+        { key: "traditional",       label: "Traditional",             result: tradResult,      type: "traditional-standard" },
+        { key: "traditional-accel", label: "Traditional (same payments)", result: tradAccelResult, type: "traditional-accel" },
+      ];
+
       ledgerArea.innerHTML = `
         <div class="ledger-buttons">
-          ${allModels.map(m =>
+          ${allLedgerModels.map(m =>
             `<button class="btn btn--outline ledger-toggle" id="ledger-toggle-${m.key}" type="button">Show ${m.label.toLowerCase()} ledger</button>`
           ).join("")}
         </div>
-        ${allModels.map(m => `<div id="ledger-${m.key}" hidden></div>`).join("")}
+        ${allLedgerModels.map(m => `<div id="ledger-${m.key}" hidden></div>`).join("")}
       `;
 
-      allModels.forEach(m => {
+      allLedgerModels.forEach(m => {
         const btn       = document.getElementById(`ledger-toggle-${m.key}`);
         const container = document.getElementById(`ledger-${m.key}`);
         const showLabel = `Show ${m.label.toLowerCase()} ledger`;
@@ -632,9 +677,11 @@
           container.hidden = false;
           this.textContent = hideLabel;
           if (!container.dataset.rendered) {
-            if (m.type === "parallel")   container.innerHTML = renderLedger(m.result);
-            else if (m.type === "sequential") container.innerHTML = renderSequentialLedger(m.result);
-            else                         container.innerHTML = renderHybridLedger(m.result);
+            if (m.type === "parallel")            container.innerHTML = renderLedger(m.result);
+            else if (m.type === "sequential")     container.innerHTML = renderSequentialLedger(m.result);
+            else if (m.type === "traditional-standard" || m.type === "traditional-accel")
+                                                  container.innerHTML = renderTraditionalLedger(m.result, m.label);
+            else                                  container.innerHTML = renderHybridLedger(m.result);
             container.dataset.rendered = "1";
           }
         });
@@ -654,7 +701,9 @@
         cycles[entry.houseIndex].push(entry);
       }
 
-      const downPaymentTarget = result.ledger.find(e => e.phase === 'saving').downPaymentTarget;
+      const firstSavingEntry  = result.ledger.find(e => e.phase === 'saving');
+      const downPaymentTarget = firstSavingEntry.downPaymentTarget;
+      const hasClosingCosts   = firstSavingEntry.closingCosts > 0;
 
       const sections = Object.keys(cycles).map(houseIdx => {
         const rows = cycles[houseIdx].map(e => {
@@ -719,9 +768,13 @@
         </div>`;
       }).join("");
 
+      const targetLabel = hasClosingCosts
+        ? `Purchase target (down payment + closing costs)`
+        : `Down payment target`;
+
       return `
         <p class="ledger-formula-key">
-          Down payment target: ${formatDollars(downPaymentTarget)}.
+          ${targetLabel}: ${formatDollars(downPaymentTarget)}.
           Saving phase: fund grows until target reached, then house is purchased.
           Payoff phase: all income goes directly to the mortgage (interest = balance &times; rate/12, remainder reduces principal).
         </p>
@@ -729,10 +782,162 @@
       `;
     }
 
+    // ── Traditional ledger rendering ──────────────────────────────────────────
+    // Two sections: saving phase and mortgage phase.
+    // Saving: Month | Contribution | Interest | Fund Balance | Notes
+    // Mortgage: Month | Payment | Interest | Principal | Remaining Balance | Notes
+    function renderTraditionalLedger(result, label) {
+      const savingEntries  = result.ledger.filter(e => e.phase === 'saving');
+      const mortgageEntries = result.ledger.filter(e => e.phase === 'mortgage');
+      const downPaymentTarget = savingEntries.length > 0 ? savingEntries[0].downPaymentTarget : 0;
+
+      const savingRows = savingEntries.map(e => {
+        const notes = e.purchased ? `<strong class="ledger-event">Purchased &mdash; ${formatDollars(downPaymentTarget)} withdrawn</strong>` : "";
+        return `<tr${e.purchased ? ' class="ledger-purchase-row"' : ''}>
+          <td class="ledger-month">${e.month}</td>
+          <td class="ledger-num">${formatDollars(e.contribution)}</td>
+          <td class="ledger-num">${formatDollars(e.interestEarned)}</td>
+          <td class="ledger-balance">${formatDollars(e.fundBalance)} / ${formatDollars(downPaymentTarget)}</td>
+          <td>${notes}</td>
+        </tr>`;
+      }).join("");
+
+      const mortgageRows = mortgageEntries.map(e => {
+        const totalOutlay = e.payment + e.housingCostsMonthly;
+        const breakdownLine = e.housingCostsMonthly > 0
+          ? `<span class="ledger-sub">${formatDollars(e.payment)} mortgage + ${formatDollars(e.housingCostsMonthly)} tax/ins/maint</span>` : "";
+        const detailLine = `<span class="ledger-sub">interest ${formatDollars(e.interestCharged)} + principal ${formatDollars(e.principalPaid)}</span>`;
+        const notes = e.balanceAfter === 0 ? `<strong class="ledger-event">Paid off</strong>` : "";
+        return `<tr${e.balanceAfter === 0 ? ' class="ledger-purchase-row"' : ''}>
+          <td class="ledger-month">${e.month}</td>
+          <td class="ledger-num">${formatDollars(totalOutlay)}${breakdownLine}</td>
+          <td class="ledger-num">${formatDollars(e.interestCharged)}</td>
+          <td class="ledger-num">${formatDollars(e.principalPaid)}</td>
+          <td class="ledger-balance">${formatDollars(e.balanceBefore)} &rarr; ${formatDollars(e.balanceAfter)}${detailLine}</td>
+          <td>${notes}</td>
+        </tr>`;
+      }).join("");
+
+      return `
+        <p class="ledger-formula-key">
+          <strong>${label}</strong> &mdash; one person saving independently.
+          Saving phase: contribute ${formatDollars(savingEntries[0] ? savingEntries[0].contribution : 0)}/mo until ${formatDollars(downPaymentTarget)} down payment reached.
+          Mortgage phase: standard payment each month; interest = balance &times; rate/12, remainder reduces principal.
+          ${mortgageEntries[0] && mortgageEntries[0].housingCostsMonthly > 0 ? `Housing costs (tax/ins/maint) of ${formatDollars(mortgageEntries[0].housingCostsMonthly)}/mo are paid separately on top of the mortgage.` : ""}
+        </p>
+        <div class="ledger-section">
+          <h3 class="ledger-heading">Saving phase</h3>
+          <div class="ledger-scroll">
+            <table class="ledger-table">
+              <colgroup>
+                <col style="width:8%"><col style="width:18%"><col style="width:18%"><col style="width:36%"><col style="width:20%">
+              </colgroup>
+              <thead><tr><th>Month</th><th>Contribution</th><th>Interest</th><th>Fund balance</th><th>Notes</th></tr></thead>
+              <tbody>${savingRows}</tbody>
+            </table>
+          </div>
+        </div>
+        <div class="ledger-section">
+          <h3 class="ledger-heading">Mortgage phase</h3>
+          <div class="ledger-scroll">
+            <table class="ledger-table">
+              <colgroup>
+                <col style="width:8%"><col style="width:22%"><col style="width:15%"><col style="width:15%"><col style="width:28%"><col style="width:12%">
+              </colgroup>
+              <thead><tr><th>Month</th><th>Total outlay</th><th>Interest</th><th>Principal</th><th>Remaining balance</th><th>Notes</th></tr></thead>
+              <tbody>${mortgageRows}</tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    // ── Per-member price inputs ───────────────────────────────────────────────
+    //
+    // Renders one number input per group member in #member-prices-list.
+    // Inputs created here carry data-auto="1" to indicate they track the global
+    // homePrice. When a user manually edits an input, that attribute is cleared,
+    // locking in their custom value across subsequent group-size changes.
+    //
+    // Rules:
+    //   - If the current input count already matches groupSize, do nothing.
+    //   - If groupSize grew, append new inputs using the current homePrice.
+    //   - If groupSize shrank, remove inputs from the end.
+    //   - When homePrice changes, update only inputs that still have data-auto="1".
+
+    function renderMemberPriceInputs() {
+      const groupSize = parseInt(document.getElementById("groupSize").value) || 0;
+      const homePrice = parseFloat(document.getElementById("homePrice").value) || 0;
+      const list      = document.getElementById("member-prices-list");
+      const existing  = list.querySelectorAll(".calc-field");
+      const current   = existing.length;
+
+      if (current === groupSize) {
+        return;
+      }
+
+      if (current > groupSize) {
+        // Remove inputs from the end until the count matches.
+        for (let i = current; i > groupSize; i--) {
+          list.removeChild(list.lastElementChild);
+        }
+        return;
+      }
+
+      // current < groupSize: append new inputs for the extra positions.
+      for (let i = current + 1; i <= groupSize; i++) {
+        const field = document.createElement("div");
+        field.className = "calc-field";
+
+        const label = document.createElement("label");
+        label.className = "calc-label";
+        label.htmlFor   = `memberPrice-${i}`;
+        label.textContent = `Member ${i} ($)`;
+
+        const input = document.createElement("input");
+        input.className  = "calc-input";
+        input.type       = "number";
+        input.id         = `memberPrice-${i}`;
+        input.min        = "50000";
+        input.max        = "5000000";
+        input.step       = "1000";
+        input.value      = homePrice;
+        input.dataset.auto = "1";
+
+        // When the user manually edits this input, clear the auto-track flag.
+        input.addEventListener("input", function () {
+          delete this.dataset.auto;
+          runCalculation();
+        });
+
+        field.appendChild(label);
+        field.appendChild(input);
+        list.appendChild(field);
+      }
+    }
+
+    // Updates auto-tracking inputs to reflect a new global homePrice.
+    function syncAutoMemberPrices() {
+      const homePrice = parseFloat(document.getElementById("homePrice").value) || 0;
+      const list      = document.getElementById("member-prices-list");
+      list.querySelectorAll("input[data-auto='1']").forEach(input => {
+        input.value = homePrice;
+      });
+    }
+
     function runCalculation() {
+      const homePrice = parseFloat(document.getElementById("homePrice").value);
+      const groupSize = parseInt(document.getElementById("groupSize").value);
+
+      const homePrices = Array.from({ length: groupSize }, (_, i) => {
+        const el = document.getElementById(`memberPrice-${i + 1}`);
+        return el ? parseFloat(el.value) || homePrice : homePrice;
+      });
+
       const inputs = {
-        homePrice: parseFloat(document.getElementById("homePrice").value),
-        groupSize: parseInt(document.getElementById("groupSize").value),
+        homePrice,
+        groupSize,
+        homePrices,
         c1: parseFloat(document.getElementById("c1").value),
         c2: parseFloat(document.getElementById("c2").value),
         downPaymentPct: parseFloat(document.getElementById("downPaymentPct").value) / 100,
@@ -742,6 +947,8 @@
         fundYieldPct: parseFloat(document.getElementById("fundYieldPct").value) || 0,
         propertyTaxPct: parseFloat(document.getElementById("propertyTaxPct").value) || 0,
         insuranceMonthly: parseFloat(document.getElementById("insuranceMonthly").value) || 0,
+        closingCostsPct: parseFloat(document.getElementById("closingCostsPct").value) || 0,
+        maintenancePct: parseFloat(document.getElementById("maintenancePct").value) ?? 1,
       };
 
       if (inputs.c2 <= 0 || inputs.c1 <= 0) {
@@ -764,7 +971,25 @@
       renderComparison(models, inputs);
     }
 
-    document.getElementById("calc-form").addEventListener("input", runCalculation);
+    // Wire up inputs that should trigger renderMemberPriceInputs in addition to runCalculation.
+    document.getElementById("groupSize").addEventListener("input", function () {
+      renderMemberPriceInputs();
+      runCalculation();
+    });
+
+    document.getElementById("homePrice").addEventListener("input", function () {
+      syncAutoMemberPrices();
+      runCalculation();
+    });
+
+    // Wire remaining inputs (excluding groupSize and homePrice, which are handled above).
+    document.getElementById("calc-form").addEventListener("input", function (e) {
+      const id = e.target.id;
+      if (id === "groupSize" || id === "homePrice" || id.startsWith("memberPrice-")) return;
+      runCalculation();
+    });
+
+    renderMemberPriceInputs();
     runCalculation();
   </script>
 

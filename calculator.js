@@ -46,18 +46,19 @@ function remainingBalance(principal, annualRatePct, termYears, monthsPaid) {
 // of months of contributions needed.
 //
 // Returns { monthsToSaveDown, totalPaid }.
-function traditionalPath(homePrice, downPaymentPct, c1, annualRatePct, termYears, fundYieldPct = 0, housingCostsMonthly = 0) {
+function traditionalPath(homePrice, downPaymentPct, c1, annualRatePct, termYears, fundYieldPct = 0, housingCostsMonthly = 0, closingCosts = 0) {
   const downPayment  = homePrice * downPaymentPct;
+  const savingTarget = downPayment + closingCosts;
   const loanPrincipal = homePrice - downPayment;
   const r            = fundYieldPct / 100 / 12;
 
   let monthsToSaveDown;
   if (r === 0) {
-    monthsToSaveDown = Math.ceil(downPayment / c1);
+    monthsToSaveDown = Math.ceil(savingTarget / c1);
   } else {
-    // Solve for n: c1 × ((1+r)^n − 1) / r = downPayment
-    // n = log(1 + downPayment × r / c1) / log(1 + r)
-    monthsToSaveDown = Math.ceil(Math.log(1 + downPayment * r / c1) / Math.log(1 + r));
+    // Solve for n: c1 × ((1+r)^n − 1) / r = savingTarget
+    // n = log(1 + savingTarget × r / c1) / log(1 + r)
+    monthsToSaveDown = Math.ceil(Math.log(1 + savingTarget * r / c1) / Math.log(1 + r));
   }
 
   const payment           = monthlyMortgagePayment(loanPrincipal, annualRatePct, termYears);
@@ -75,8 +76,9 @@ function traditionalPath(homePrice, downPaymentPct, c1, annualRatePct, termYears
 // actual mortgage payment is (C2 - housingCostsMonthly), finishing faster than
 // the standard 30-year term. Total paid is exactly C2/month — no extra on top.
 // Returns { monthsToSaveDown, monthsToPayoff, totalMonths, totalPaid }.
-function traditionalAcceleratedPath(homePrice, c1, c2, annualRatePct, termYears, fundYieldPct = 0, housingCostsMonthly = 0) {
+function traditionalAcceleratedPath(homePrice, c1, c2, annualRatePct, termYears, fundYieldPct = 0, housingCostsMonthly = 0, closingCosts = 0) {
   const downPayment      = homePrice * 0.20;
+  const savingTarget     = downPayment + closingCosts;
   const loanPrincipal    = homePrice - downPayment;
   const r                = fundYieldPct / 100 / 12;
   const mr               = annualRatePct / 100 / 12;
@@ -84,9 +86,9 @@ function traditionalAcceleratedPath(homePrice, c1, c2, annualRatePct, termYears,
 
   let monthsToSaveDown;
   if (r === 0) {
-    monthsToSaveDown = Math.ceil(downPayment / c1);
+    monthsToSaveDown = Math.ceil(savingTarget / c1);
   } else {
-    monthsToSaveDown = Math.ceil(Math.log(1 + downPayment * r / c1) / Math.log(1 + r));
+    monthsToSaveDown = Math.ceil(Math.log(1 + savingTarget * r / c1) / Math.log(1 + r));
   }
 
   let monthsToPayoff;
@@ -213,17 +215,26 @@ function calculateGroup(inputs, sequentialCount = 0) {
     fundYieldPct = 0,
     propertyTaxPct = 0,
     insuranceMonthly = 0,
+    closingCostsPct = 0,
+    maintenancePct = 1,
+    homePrices = Array.from({ length: N }, () => homePrice),
   } = inputs;
 
-  // Per-member monthly cost of ownership (tax + maintenance + insurance).
-  // Maintenance is fixed at 1% of home price annually.
-  const housingCostsMonthly = homePrice * (propertyTaxPct / 100 + 0.01) / 12 + insuranceMonthly;
+  const closingCostsList = homePrices.map(p => p * closingCostsPct / 100);
+  const downPayments     = homePrices.map(p => p * downPaymentPct);
+  const purchaseTargets  = homePrices.map((p, k) => downPayments[k] + closingCostsList[k]);
+  const loanPrincipals   = homePrices.map((p, k) => p - downPayments[k]);
+  const mortgagePayments = loanPrincipals.map(lp => monthlyMortgagePayment(lp, annualRatePct, termYears));
+  const housingCostsList = homePrices.map(p => p * (propertyTaxPct / 100 + maintenancePct / 100) / 12 + insuranceMonthly);
 
-  const downPaymentTarget  = homePrice * downPaymentPct;
-  const loanPrincipal      = homePrice * (1 - downPaymentPct);
-  const mortgagePaymentStd = monthlyMortgagePayment(loanPrincipal, annualRatePct, termYears);
-  const r      = annualRatePct / 100 / 12;
-  const fundR  = fundYieldPct  / 100 / 12;
+  // Prefix sum: housingCostsCumulative[k] = total housing costs for k housed members.
+  // Includes index N (all members housed) so payoff-phase access at k+1 is always valid.
+  const housingCostsCumulative = Array.from({ length: N + 1 }, (_, k) =>
+    housingCostsList.slice(0, k).reduce((a, b) => a + b, 0)
+  );
+
+  const r     = annualRatePct / 100 / 12;
+  const fundR = fundYieldPct  / 100 / 12;
 
   const MAX_MONTHS = 1200;
 
@@ -254,19 +265,19 @@ function calculateGroup(inputs, sequentialCount = 0) {
   let carryover = 0;
 
   for (let k = 0; k < sequentialCount; k++) {
-    // Saving sub-phase: k prior mortgages paid off; fund grows to downPaymentTarget.
+    // Saving sub-phase: k prior mortgages paid off; fund grows to purchaseTargets[k].
     const savingC2   = k * c2;
     const savingC1   = (N - k) * c1;
     let   savingFund = carryover;
     carryover        = 0;
 
-    while (savingFund < downPaymentTarget) {
+    while (savingFund < purchaseTargets[k]) {
       if (month >= MAX_MONTHS) {
         return { error: "Simulation exceeded 1200 months. Try different inputs.", positions: null, totalMonths: null, traditional: null, ledger: null };
       }
       for (let i = 0; i < N; i++) totalPaid[i] += i < k ? c2 : c1;
       const fundInterestEarned = savingFund * fundR;
-      savingFund += savingC2 + savingC1 + monthlyDonorContrib + fundInterestEarned - k * housingCostsMonthly;
+      savingFund += savingC2 + savingC1 + monthlyDonorContrib + fundInterestEarned - housingCostsCumulative[k];
       month++;
       ledger.push({
         month,
@@ -279,27 +290,28 @@ function calculateGroup(inputs, sequentialCount = 0) {
         donorIncome:    monthlyDonorContrib,
         fundInterestEarned,
         totalIncome:    savingC2 + savingC1 + monthlyDonorContrib + fundInterestEarned,
-        housingCosts:   k * housingCostsMonthly,
+        housingCosts:   housingCostsCumulative[k],
         fundBalance:    savingFund,
-        downPaymentTarget,
-        housePurchased: savingFund >= downPaymentTarget,
+        downPaymentTarget: purchaseTargets[k],
+        closingCosts:   closingCostsList[k],
+        housePurchased: savingFund >= purchaseTargets[k],
         mortgageBalanceBefore: null, interestCharged: null,
         principalPaid: null, mortgageBalanceAfter: null, overpayment: null,
       });
     }
 
-    savingFund -= downPaymentTarget;
+    savingFund -= purchaseTargets[k];
     housedAtMonth[k] = month;
 
     // Payoff sub-phase: k+1 members housed; ALL income → this mortgage.
     const payoffC2           = (k + 1) * c2;
     const payoffC1           = (N - k - 1) * c1;
-    const payoffHousingCosts = (k + 1) * housingCostsMonthly;
+    const payoffHousingCosts = housingCostsCumulative[k + 1];
     const payoffGrossIncome  = payoffC2 + payoffC1 + monthlyDonorContrib;
     const payoffIncome       = payoffGrossIncome - payoffHousingCosts;
 
-    let mortgageBalance = Math.max(0, loanPrincipal - savingFund);
-    if (savingFund > loanPrincipal) carryover = savingFund - loanPrincipal;
+    let mortgageBalance = Math.max(0, loanPrincipals[k] - savingFund);
+    if (savingFund > loanPrincipals[k]) carryover = savingFund - loanPrincipals[k];
 
     while (mortgageBalance > 0) {
       if (month >= MAX_MONTHS) {
@@ -357,9 +369,19 @@ function calculateGroup(inputs, sequentialCount = 0) {
     const c1Income           = preHouseMembers  * c1;
     const fundInterestEarned = fundBalance * fundR;
     const totalIncome        = c2Income + c1Income + monthlyDonorContrib + fundInterestEarned;
-    const totalObligations   = mortgageCount * mortgagePaymentStd;
-    const netGrowth          = totalIncome - totalObligations - postHouseMembers * housingCostsMonthly;
-    const fundBalanceStart   = fundBalance;
+
+    // Sum mortgage payments only for Phase-B positions that have a live mortgage.
+    const totalObligations = mortgageStartMonth.reduce((sum, startMonth, k) =>
+      startMonth !== null ? sum + mortgagePayments[k] : sum, 0
+    );
+
+    // Sum housing costs for all currently housed members.
+    const currentHousingCosts = housedAtMonth.reduce((sum, hMonth, k) =>
+      hMonth !== null ? sum + housingCostsList[k] : sum, 0
+    );
+
+    const netGrowth        = totalIncome - totalObligations - currentHousingCosts;
+    const fundBalanceStart = fundBalance;
 
     for (let k = 0; k < N; k++) {
       totalPaid[k] += housedAtMonth[k] !== null ? c2 : c1;
@@ -373,14 +395,17 @@ function calculateGroup(inputs, sequentialCount = 0) {
     const activeMortgagesSnapshot = mortgageCount;
 
     let housePurchased = null;
-    if (fundBalance >= downPaymentTarget) {
-      fundBalance -= downPaymentTarget;
-      housedAtMonth[housedCount]      = month;
-      mortgageStartMonth[housedCount] = month;
+    if (fundBalance >= purchaseTargets[housedCount]) {
+      const idx = housedCount;
+      fundBalance -= purchaseTargets[idx];
+      housedAtMonth[idx]      = month;
+      mortgageStartMonth[idx] = month;
       housePurchased = {
-        position:             housedCount + 1,
+        position:             idx + 1,
         outright:             false,
-        downPaymentWithdrawn: downPaymentTarget,
+        downPaymentWithdrawn: purchaseTargets[idx],
+        closingCosts:         closingCostsList[idx],
+        downPayment:          downPayments[idx],
       };
       housedCount++;
       mortgageCount++;
@@ -396,15 +421,15 @@ function calculateGroup(inputs, sequentialCount = 0) {
       donorIncome:          monthlyDonorContrib,
       fundInterestEarned,
       totalIncome,
-      housingCosts:         postHouseMembers * housingCostsMonthly,
+      housingCosts:         currentHousingCosts,
       activeMortgages:      activeMortgagesSnapshot,
-      mortgagePaymentStd,
+      mortgagePaymentStd:   null,
       totalObligations,
       netGrowth,
       fundBalanceStart,
       fundBalanceAfterGrowth,
       fundBalanceEnd:       fundBalance,
-      fundTarget:           downPaymentTarget,
+      fundTarget:           purchaseTargets[housedCount] ?? null,
       housePurchased,
       mortgageDetails:      null,
       surplus:              0,
@@ -415,8 +440,8 @@ function calculateGroup(inputs, sequentialCount = 0) {
 
   // Only positions bought with a mortgage (mortgageStartMonth[k] !== null) have
   // a remaining balance; outright positions stay at zero.
-  let balances = mortgageStartMonth.map(h =>
-    h !== null ? Math.max(0, remainingBalance(loanPrincipal, annualRatePct, termYears, month - h)) : 0
+  let balances = mortgageStartMonth.map((h, k) =>
+    h !== null ? Math.max(0, remainingBalance(loanPrincipals[k], annualRatePct, termYears, month - h)) : 0
   );
 
   // Apply any surplus fund balance carried over from phase 1 immediately.
@@ -433,8 +458,14 @@ function calculateGroup(inputs, sequentialCount = 0) {
 
     const activeMortgages  = balances.filter(b => b > 0).length;
     const totalIncome      = N * c2 + monthlyDonorContrib;
-    const totalObligations = activeMortgages * mortgagePaymentStd;
-    const surplus          = Math.max(0, totalIncome - N * housingCostsMonthly - totalObligations);
+    const totalAllHousingCosts = housingCostsList.reduce((a, b) => a + b, 0);
+
+    // Sum the standard payment only for mortgages still carrying a positive balance.
+    const totalObligations = balances.reduce((sum, b, k) =>
+      b > 0 ? sum + mortgagePayments[k] : sum, 0
+    );
+
+    const surplus = Math.max(0, totalIncome - totalAllHousingCosts - totalObligations);
 
     for (let k = 0; k < N; k++) {
       totalPaid[k] += c2;
@@ -442,13 +473,13 @@ function calculateGroup(inputs, sequentialCount = 0) {
 
     month++;
 
-    // Apply standard amortization payment to each active mortgage.
+    // Apply per-mortgage standard amortization payment to each active mortgage.
     const mortgageDetails = balances.map((b, i) => {
       if (b <= 0) {
         return { position: i + 1, balanceBefore: 0, interestCharged: 0, principalFromPayment: 0, extraPrincipal: 0, balanceAfter: 0 };
       }
       const interestCharged      = b * r;
-      const principalFromPayment = Math.min(mortgagePaymentStd - interestCharged, b);
+      const principalFromPayment = Math.min(mortgagePayments[i] - interestCharged, b);
       return {
         position: i + 1,
         balanceBefore: b,
@@ -481,9 +512,9 @@ function calculateGroup(inputs, sequentialCount = 0) {
       donorIncome: monthlyDonorContrib,
       fundInterestEarned: 0,
       totalIncome,
-      housingCosts: N * housingCostsMonthly,
+      housingCosts: totalAllHousingCosts,
       activeMortgages,
-      mortgagePaymentStd,
+      mortgagePaymentStd: null,
       totalObligations,
       netGrowth: surplus,
       fundBalanceStart: 0,
@@ -497,9 +528,13 @@ function calculateGroup(inputs, sequentialCount = 0) {
   }
 
   const totalMonths = month;
-  // Traditional path always uses 20% down for a fair apples-to-apples baseline.
-  const trad        = traditionalPath(homePrice, 0.20, c1, annualRatePct, termYears, fundYieldPct, housingCostsMonthly);
-  const tradAccel   = traditionalAcceleratedPath(homePrice, c1, c2, annualRatePct, termYears, fundYieldPct, housingCostsMonthly);
+
+  // Compute per-position traditional comparisons using each member's own home price.
+  const tradPerPosition = homePrices.map((p, k) => {
+    const path  = traditionalPath(p, 0.20, c1, annualRatePct, termYears, fundYieldPct, housingCostsList[k], closingCostsList[k]);
+    const accel = traditionalAcceleratedPath(p, c1, c2, annualRatePct, termYears, fundYieldPct, housingCostsList[k], closingCostsList[k]);
+    return { path, accel };
+  });
 
   const positions = housedAtMonth.map((housedMonth, k) => {
     const paid = Math.round(totalPaid[k]);
@@ -507,23 +542,23 @@ function calculateGroup(inputs, sequentialCount = 0) {
       position: k + 1,
       monthsUntilHoused: housedMonth,
       totalPaid: paid,
-      savedVsTraditional: Math.round(trad.totalPaid - paid),
+      savedVsTraditional: Math.round(tradPerPosition[k].path.totalPaid - paid),
     };
   });
 
   return {
     positions,
     totalMonths,
-    traditional: {
-      monthsToSaveDown: trad.monthsToSaveDown,
-      totalPaid: Math.round(trad.totalPaid),
+    traditional: tradPerPosition.map(t => ({
+      monthsToSaveDown: t.path.monthsToSaveDown,
+      totalPaid: Math.round(t.path.totalPaid),
       accelerated: {
-        monthsToSaveDown: tradAccel.monthsToSaveDown,
-        monthsToPayoff: tradAccel.monthsToPayoff,
-        totalMonths: tradAccel.totalMonths,
-        totalPaid: Math.round(tradAccel.totalPaid),
+        monthsToSaveDown: t.accel.monthsToSaveDown,
+        monthsToPayoff: t.accel.monthsToPayoff,
+        totalMonths: t.accel.totalMonths,
+        totalPaid: Math.round(t.accel.totalPaid),
       },
-    },
+    })),
     ledger,
     sequentialCount,
     error: null,
@@ -582,15 +617,26 @@ function calculateGroupSequential(inputs) {
     fundYieldPct = 0,
     propertyTaxPct = 0,
     insuranceMonthly = 0,
+    closingCostsPct = 0,
+    maintenancePct = 1,
+    homePrices = Array.from({ length: N }, () => homePrice),
   } = inputs;
 
-  const housingCostsMonthly = homePrice * (propertyTaxPct / 100 + 0.01) / 12 + insuranceMonthly;
+  const closingCostsList = homePrices.map(p => p * closingCostsPct / 100);
+  const downPayments     = homePrices.map(p => p * downPaymentPct);
+  const purchaseTargets  = homePrices.map((p, k) => downPayments[k] + closingCostsList[k]);
+  const loanPrincipals   = homePrices.map((p, k) => p - downPayments[k]);
+  const housingCostsList = homePrices.map(p => p * (propertyTaxPct / 100 + maintenancePct / 100) / 12 + insuranceMonthly);
 
-  const downPaymentTarget = homePrice * downPaymentPct;
-  const loanPrincipal     = homePrice * (1 - downPaymentPct);
-  const r                 = annualRatePct / 100 / 12;
-  const fundR             = fundYieldPct  / 100 / 12;
-  const MAX_MONTHS        = 600;
+  // Prefix sum: housingCostsCumulative[k] = total housing costs for k housed members.
+  // Includes index N (all members housed) so payoff-phase access at k+1 is always valid.
+  const housingCostsCumulative = Array.from({ length: N + 1 }, (_, k) =>
+    housingCostsList.slice(0, k).reduce((a, b) => a + b, 0)
+  );
+
+  const r          = annualRatePct / 100 / 12;
+  const fundR      = fundYieldPct  / 100 / 12;
+  const MAX_MONTHS = 600;
 
   const housedAtMonth = new Array(N).fill(null);
   const totalPaid     = new Array(N).fill(0);
@@ -609,7 +655,7 @@ function calculateGroupSequential(inputs) {
     let   fundBalance   = carryover;
     carryover           = 0;
 
-    while (fundBalance < downPaymentTarget) {
+    while (fundBalance < purchaseTargets[k]) {
       if (month >= MAX_MONTHS) {
         return { error: "Simulation exceeded 600 months. Try different inputs.", positions: null, totalMonths: null, traditional: null, ledger: null };
       }
@@ -618,7 +664,7 @@ function calculateGroupSequential(inputs) {
         totalPaid[i] += i < k ? c2 : c1;
       }
       const fundInterestEarned = fundBalance * fundR;
-      fundBalance += savingIncome + fundInterestEarned - k * housingCostsMonthly;
+      fundBalance += savingIncome + fundInterestEarned - housingCostsCumulative[k];
       month++;
 
       ledger.push({
@@ -632,10 +678,11 @@ function calculateGroupSequential(inputs) {
         donorIncome: monthlyDonorContrib,
         fundInterestEarned,
         totalIncome: savingIncome + fundInterestEarned,
-        housingCosts: k * housingCostsMonthly,
+        housingCosts: housingCostsCumulative[k],
         fundBalance,
-        downPaymentTarget,
-        housePurchased: fundBalance >= downPaymentTarget,
+        downPaymentTarget: purchaseTargets[k],
+        closingCosts: closingCostsList[k],
+        housePurchased: fundBalance >= purchaseTargets[k],
         mortgageBalanceBefore: null,
         interestCharged: null,
         principalPaid: null,
@@ -644,8 +691,8 @@ function calculateGroupSequential(inputs) {
       });
     }
 
-    // Buy house k+1: withdraw down payment, member k moves in.
-    fundBalance -= downPaymentTarget;
+    // Buy house k+1: withdraw purchase target (down payment + closing costs), member k moves in.
+    fundBalance -= purchaseTargets[k];
     housedAtMonth[k] = month;
 
     // ── Payoff phase ─────────────────────────────────────────────────────
@@ -653,16 +700,16 @@ function calculateGroupSequential(inputs) {
     // ALL monthly income goes toward paying off this mortgage.
     const payoffC2           = (k + 1) * c2;
     const payoffC1           = (N - k - 1) * c1;
-    const payoffHousingCosts = (k + 1) * housingCostsMonthly;
+    const payoffHousingCosts = housingCostsCumulative[k + 1];
     const payoffGrossIncome  = payoffC2 + payoffC1 + monthlyDonorContrib;
     const payoffIncome       = payoffGrossIncome - payoffHousingCosts;
 
     // The saving-phase overshoot reduces the starting mortgage balance.
     // If the overshoot fully covers the loan principal (including the 100% down
     // payment case where loanPrincipal = 0), the excess carries to the next cycle.
-    let mortgageBalance = Math.max(0, loanPrincipal - fundBalance);
-    if (fundBalance > loanPrincipal) {
-      carryover = fundBalance - loanPrincipal;
+    let mortgageBalance = Math.max(0, loanPrincipals[k] - fundBalance);
+    if (fundBalance > loanPrincipals[k]) {
+      carryover = fundBalance - loanPrincipals[k];
     }
 
     while (mortgageBalance > 0) {
@@ -712,9 +759,13 @@ function calculateGroupSequential(inputs) {
   }
 
   const totalMonths = month;
-  // Traditional path always uses 20% down for a fair apples-to-apples baseline.
-  const trad        = traditionalPath(homePrice, 0.20, c1, annualRatePct, termYears, fundYieldPct, housingCostsMonthly);
-  const tradAccel   = traditionalAcceleratedPath(homePrice, c1, c2, annualRatePct, termYears, fundYieldPct, housingCostsMonthly);
+
+  // Compute per-position traditional comparisons using each member's own home price.
+  const tradPerPosition = homePrices.map((p, k) => {
+    const path  = traditionalPath(p, 0.20, c1, annualRatePct, termYears, fundYieldPct, housingCostsList[k], closingCostsList[k]);
+    const accel = traditionalAcceleratedPath(p, c1, c2, annualRatePct, termYears, fundYieldPct, housingCostsList[k], closingCostsList[k]);
+    return { path, accel };
+  });
 
   const positions = housedAtMonth.map((housedMonth, k) => {
     const paid = Math.round(totalPaid[k]);
@@ -722,36 +773,130 @@ function calculateGroupSequential(inputs) {
       position: k + 1,
       monthsUntilHoused: housedMonth,
       totalPaid: paid,
-      savedVsTraditional: Math.round(trad.totalPaid - paid),
+      savedVsTraditional: Math.round(tradPerPosition[k].path.totalPaid - paid),
     };
   });
 
   return {
     positions,
     totalMonths,
-    traditional: {
-      monthsToSaveDown: trad.monthsToSaveDown,
-      totalPaid: Math.round(trad.totalPaid),
+    traditional: tradPerPosition.map(t => ({
+      monthsToSaveDown: t.path.monthsToSaveDown,
+      totalPaid: Math.round(t.path.totalPaid),
       accelerated: {
-        monthsToSaveDown: tradAccel.monthsToSaveDown,
-        monthsToPayoff: tradAccel.monthsToPayoff,
-        totalMonths: tradAccel.totalMonths,
-        totalPaid: Math.round(tradAccel.totalPaid),
+        monthsToSaveDown: t.accel.monthsToSaveDown,
+        monthsToPayoff: t.accel.monthsToPayoff,
+        totalMonths: t.accel.totalMonths,
+        totalPaid: Math.round(t.accel.totalPaid),
       },
-    },
+    })),
     ledger,
     error: null,
   };
+}
+
+// ─── Traditional ledger helpers ──────────────────────────────────────────────
+
+// Simulates traditionalPath month-by-month and returns a ledger array alongside
+// the same summary scalars as traditionalPath.
+// Returns { ledger, monthsToSaveDown, totalPaid }.
+function traditionalPathLedger(homePrice, downPaymentPct, c1, annualRatePct, termYears, fundYieldPct = 0, housingCostsMonthly = 0, closingCosts = 0) {
+  const downPayment    = homePrice * downPaymentPct;
+  const savingTarget   = downPayment + closingCosts;
+  const loanPrincipal  = homePrice - downPayment;
+  const r              = fundYieldPct / 100 / 12;
+  const mr             = annualRatePct / 100 / 12;
+  const mortgagePayment = monthlyMortgagePayment(loanPrincipal, annualRatePct, termYears);
+
+  const ledger = [];
+  let month = 0;
+  let fundBalance = 0;
+
+  // Saving phase
+  while (fundBalance < savingTarget) {
+    month++;
+    const interestEarned = fundBalance * r;
+    fundBalance += c1 + interestEarned;
+    const purchased = fundBalance >= savingTarget;
+    ledger.push({ month, phase: 'saving', contribution: c1, interestEarned, fundBalance: Math.min(fundBalance, savingTarget), downPaymentTarget: savingTarget, purchased });
+    if (purchased) break;
+  }
+  const monthsToSaveDown = month;
+
+  // Mortgage phase
+  let balance = loanPrincipal;
+  const totalMortgageMonths = termYears * 12;
+  for (let i = 0; i < totalMortgageMonths && balance > 0; i++) {
+    month++;
+    const interestCharged = balance * mr;
+    const principalPaid   = Math.min(mortgagePayment - interestCharged, balance);
+    const balanceBefore   = balance;
+    balance               = Math.max(0, balance - principalPaid);
+    ledger.push({ month, phase: 'mortgage', payment: mortgagePayment, interestCharged, principalPaid, balanceBefore, balanceAfter: balance, housingCostsMonthly });
+  }
+
+  const totalPaid = monthsToSaveDown * c1 + mortgagePayment * termYears * 12 + housingCostsMonthly * termYears * 12;
+  return { ledger, monthsToSaveDown, totalPaid };
+}
+
+// Simulates traditionalAcceleratedPath month-by-month and returns a ledger array
+// alongside the same summary scalars as traditionalAcceleratedPath.
+// Returns { ledger, monthsToSaveDown, monthsToPayoff, totalMonths, totalPaid }.
+function traditionalAcceleratedPathLedger(homePrice, c1, c2, annualRatePct, termYears, fundYieldPct = 0, housingCostsMonthly = 0, closingCosts = 0) {
+  const downPayment    = homePrice * 0.20;
+  const savingTarget   = downPayment + closingCosts;
+  const loanPrincipal  = homePrice - downPayment;
+  const r              = fundYieldPct / 100 / 12;
+  const mr             = annualRatePct / 100 / 12;
+  let mortgagePayment  = c2 - housingCostsMonthly;
+
+  // Edge case: payment doesn't cover first month's interest — fall back to standard.
+  if (mr > 0 && mortgagePayment <= mr * loanPrincipal) {
+    mortgagePayment = monthlyMortgagePayment(loanPrincipal, annualRatePct, termYears);
+  }
+
+  const ledger = [];
+  let month = 0;
+  let fundBalance = 0;
+
+  // Saving phase
+  while (fundBalance < savingTarget) {
+    month++;
+    const interestEarned = fundBalance * r;
+    fundBalance += c1 + interestEarned;
+    const purchased = fundBalance >= savingTarget;
+    ledger.push({ month, phase: 'saving', contribution: c1, interestEarned, fundBalance: Math.min(fundBalance, savingTarget), downPaymentTarget: savingTarget, purchased });
+    if (purchased) break;
+  }
+  const monthsToSaveDown = month;
+
+  // Mortgage phase
+  let balance = loanPrincipal;
+  let monthsToPayoff = 0;
+  while (balance > 0) {
+    month++;
+    monthsToPayoff++;
+    const interestCharged = balance * mr;
+    const principalPaid   = Math.min(mortgagePayment - interestCharged, balance);
+    const balanceBefore   = balance;
+    balance               = Math.max(0, balance - principalPaid);
+    ledger.push({ month, phase: 'mortgage', payment: c2, mortgagePayment, interestCharged, principalPaid, balanceBefore, balanceAfter: balance, housingCostsMonthly });
+  }
+
+  const totalPaid = monthsToSaveDown * c1 + monthsToPayoff * c2;
+  return { ledger, monthsToSaveDown, monthsToPayoff, totalMonths: monthsToSaveDown + monthsToPayoff, totalPaid };
 }
 
 // ─── Export ───────────────────────────────────────────────────────────────────
 
 // Support both CommonJS (for tests) and browser global.
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { calculateGroup, calculateGroupSequential, monthlyMortgagePayment, traditionalPath, traditionalAcceleratedPath };
+  module.exports = { calculateGroup, calculateGroupSequential, monthlyMortgagePayment, traditionalPath, traditionalAcceleratedPath, traditionalPathLedger, traditionalAcceleratedPathLedger };
 } else {
-  window.calculateGroup           = calculateGroup;
-  window.calculateGroupSequential = calculateGroupSequential;
+  window.calculateGroup                      = calculateGroup;
+  window.calculateGroupSequential            = calculateGroupSequential;
+  window.traditionalPathLedger               = traditionalPathLedger;
+  window.traditionalAcceleratedPathLedger    = traditionalAcceleratedPathLedger;
 }
 // calculateGroup(inputs, K) covers all cases:
 //   K = 0           → pure parallel  (default)
