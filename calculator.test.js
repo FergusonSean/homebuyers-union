@@ -4,7 +4,7 @@
 
 "use strict";
 
-const { calculateGroup, monthlyMortgagePayment, traditionalPath } = require("./calculator.js");
+const { calculateGroup, calculateGroupWithDropout, monthlyMortgagePayment, traditionalPath } = require("./calculator.js");
 
 let passed = 0;
 let failed = 0;
@@ -211,6 +211,166 @@ const capped = calculateGroup({
 
 assert("capped simulation returns error string", typeof capped.error === "string" && capped.error.length > 0);
 assert("capped simulation positions is null", capped.positions === null);
+
+// ─── calculateGroupWithDropout ────────────────────────────────────────────────
+
+console.log("\ncalculateGroupWithDropout — pre-move-in dropout:");
+
+// Member 2 (index 1) drops out at month 5, before they would be housed.
+// With c1=2000 and groupSize=3, members get housed early enough that dropout at
+// month 5 is definitely before member index 1 (position 2) is housed.
+const preDropoutInputs = {
+  homePrice:    300000,
+  groupSize:    3,
+  c1:           2000,
+  c2:           3000,
+  downPaymentPct: 0.20,
+  annualRatePct:  7,
+  termYears:      30,
+  monthlyDonorContrib: 0,
+};
+
+// First run the baseline (no dropout) to confirm member index 1 is housed later than month 5.
+const baselineResult = calculateGroup(preDropoutInputs, 0);
+assert(
+  "baseline: member 1 (index 1) is housed after month 5",
+  baselineResult.positions[1].monthsUntilHoused > 5
+);
+
+const preDropout = calculateGroupWithDropout(preDropoutInputs, 0, {
+  memberIndex: 1,
+  month:       5,
+  salePrice:   0, // ignored for pre-move-in
+});
+
+assert("pre-move-in dropout: no error", preDropout.error === null);
+assert("pre-move-in dropout: returns 3 positions", preDropout.positions && preDropout.positions.length === 3);
+assert(
+  "pre-move-in dropout: dropped member (index 1) has null monthsUntilHoused",
+  preDropout.positions[1].monthsUntilHoused === null
+);
+assert(
+  "pre-move-in dropout: remaining members (0 and 2) are housed",
+  preDropout.positions[0].monthsUntilHoused !== null &&
+  preDropout.positions[2].monthsUntilHoused !== null
+);
+
+// The fund must have been reduced by exactly the c1Refund at dropout month.
+// Verify via the ledger: the dropoutEvent entry should exist.
+const preDropoutEvent = preDropout.ledger.find(e => e.dropoutEvent);
+assert("pre-move-in dropout: ledger contains a dropoutEvent entry", preDropoutEvent !== null && preDropoutEvent !== undefined);
+if (preDropoutEvent) {
+  assert("pre-move-in dropout: dropoutEvent.type is pre-move-in",   preDropoutEvent.dropoutEvent.type === 'pre-move-in');
+  assert("pre-move-in dropout: dropoutEvent.memberIndex is 1",       preDropoutEvent.dropoutEvent.memberIndex === 1);
+  assert("pre-move-in dropout: dropoutEvent.c1Refund >= 0",          preDropoutEvent.dropoutEvent.c1Refund >= 0);
+  // The refund should equal what the dropped member paid: 4 months (months 1-4) × c1=2000 = 8000
+  // (they contribute in months 1-4, then dropout is applied after month 5 contributions but
+  // the refund is based on totalPaid at that point: 5 months × 2000 = 10000)
+  assertClose(
+    "pre-move-in dropout: c1Refund equals 5 months of c1 (months 1-5 contributed before dropout applied)",
+    preDropoutEvent.dropoutEvent.c1Refund,
+    5 * preDropoutInputs.c1,
+    preDropoutInputs.c1 // tolerance of one month (timing of when totalPaid is snapshot)
+  );
+  assert("pre-move-in dropout: dropoutEvent.saleMonth is null",      preDropoutEvent.dropoutEvent.saleMonth === null);
+}
+
+console.log("\ncalculateGroupWithDropout — post-move-in dropout:");
+
+// Use a small group with high contributions so position 0 is housed quickly,
+// then member 0 drops out after they are housed.
+const postDropoutInputs = {
+  homePrice:    200000,
+  groupSize:    3,
+  c1:           5000,
+  c2:           4000,
+  downPaymentPct: 0.20,
+  annualRatePct:  6,
+  termYears:      30,
+  monthlyDonorContrib: 0,
+};
+
+// Baseline: find when member 0 is housed.
+const baselinePost = calculateGroup(postDropoutInputs, 0);
+const member0HousedMonth = baselinePost.positions[0].monthsUntilHoused;
+
+assert("baseline: member 0 is housed before month 20", member0HousedMonth < 20);
+
+// Dropout at member0HousedMonth + 2 (definitely post-move-in).
+const postDropoutMonth = member0HousedMonth + 2;
+const testSalePrice    = 180000; // below or near loan amount to get measurable sale event
+
+const postDropout = calculateGroupWithDropout(postDropoutInputs, 0, {
+  memberIndex: 0,
+  month:       postDropoutMonth,
+  salePrice:   testSalePrice,
+});
+
+assert("post-move-in dropout: no error", postDropout.error === null);
+assert(
+  "post-move-in dropout: dropped member (index 0) has null monthsUntilHoused",
+  postDropout.positions[0].monthsUntilHoused === null
+);
+assert(
+  "post-move-in dropout: remaining members (1 and 2) are housed",
+  postDropout.positions[1].monthsUntilHoused !== null &&
+  postDropout.positions[2].monthsUntilHoused !== null
+);
+
+// The ledger should contain both a dropoutEvent and a saleEvent.
+const postDropoutEvent = postDropout.ledger.find(e => e.dropoutEvent);
+const postSaleEvent    = postDropout.ledger.find(e => e.saleEvent);
+
+assert("post-move-in dropout: ledger contains a dropoutEvent entry", postDropoutEvent !== null && postDropoutEvent !== undefined);
+assert("post-move-in dropout: ledger contains a saleEvent entry",    postSaleEvent    !== null && postSaleEvent    !== undefined);
+
+if (postDropoutEvent) {
+  assert("post-move-in dropout: dropoutEvent.type is post-move-in", postDropoutEvent.dropoutEvent.type === 'post-move-in');
+  assert("post-move-in dropout: dropoutEvent.saleMonth = dropoutMonth + 2",
+    postDropoutEvent.dropoutEvent.saleMonth === postDropoutMonth + 2);
+  assert("post-move-in dropout: dropoutEvent.c1Refund is null", postDropoutEvent.dropoutEvent.c1Refund === null);
+}
+
+if (postSaleEvent) {
+  assert("post-move-in dropout: saleEvent.memberIndex is 0",     postSaleEvent.saleEvent.memberIndex === 0);
+  assert("post-move-in dropout: saleEvent.salePrice matches input", postSaleEvent.saleEvent.salePrice === testSalePrice);
+  // The saleEvent month should be dropoutMonth + 2.
+  assert("post-move-in dropout: saleEvent occurs at dropout month + 2",
+    postSaleEvent.month === postDropoutMonth + 2);
+  // proceeds = salePrice - remainingBalance (may be negative or positive)
+  const expectedProceeds = testSalePrice - postSaleEvent.saleEvent.remainingBalance;
+  assertClose(
+    "post-move-in dropout: saleEvent.proceeds = salePrice - remainingBalance",
+    postSaleEvent.saleEvent.proceeds,
+    expectedProceeds,
+    1
+  );
+}
+
+console.log("\ncalculateGroupWithDropout — dropout month beyond simulation end:");
+
+// Dropout month set far beyond when the simulation will complete.
+// The dropout event is never triggered; result should complete normally.
+const lateDropout = calculateGroupWithDropout(
+  { homePrice: 200000, groupSize: 2, c1: 5000, c2: 5000, downPaymentPct: 0.20, annualRatePct: 6, termYears: 30, monthlyDonorContrib: 0 },
+  0,
+  { memberIndex: 0, month: 9999, salePrice: 0 }
+);
+
+assert("late dropout: no error", lateDropout.error === null);
+assert("late dropout: all members housed", lateDropout.positions.every(p => p.monthsUntilHoused !== null));
+// No dropout event should appear in the ledger.
+const hasDropoutEvent = lateDropout.ledger.some(e => e.dropoutEvent);
+assert("late dropout: no dropoutEvent in ledger (dropout month never reached)", !hasDropoutEvent);
+
+console.log("\ncalculateGroupWithDropout — rejects non-parallel sequentialCount:");
+
+const nonParallelDropout = calculateGroupWithDropout(
+  { homePrice: 300000, groupSize: 3, c1: 1000, c2: 2500, downPaymentPct: 0.20, annualRatePct: 7, termYears: 30, monthlyDonorContrib: 0 },
+  1,
+  { memberIndex: 0, month: 5, salePrice: 0 }
+);
+assert("non-parallel dropout: returns error", typeof nonParallelDropout.error === "string" && nonParallelDropout.error.length > 0);
 
 // ─── Summary ──────────────────────────────────────────────────────────────────
 

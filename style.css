@@ -1155,3 +1155,113 @@ a.nav__wordmark:hover {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Dropout scenario section ───────────────────────────────────────────────── */
+
+.dropout-section {
+  margin-top: 3rem;
+  padding-top: 2rem;
+  border-top: 1px solid #ddd9d2;
+}
+
+.dropout-heading {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #1C1C1C;
+  margin-bottom: 0.4rem;
+}
+
+.dropout-desc {
+  font-size: 0.9rem;
+  color: #666;
+  margin-bottom: 1.25rem;
+  font-style: italic;
+}
+
+.dropout-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.dropout-fields {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  align-items: end;
+}
+
+@media (max-width: 599px) {
+  .dropout-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Dropout results ─────────────────────────────────────────────────────────── */
+
+.dropout-event-summary {
+  background: #f0ece6;
+  border-left: 3px solid #8B1A1A;
+  padding: 0.85rem 1rem;
+  margin: 1.25rem 0 1rem;
+  border-radius: 0 4px 4px 0;
+  font-size: 0.875rem;
+  color: #333;
+  line-height: 1.6;
+}
+
+.dropout-event-summary strong {
+  display: block;
+  margin-bottom: 0.3rem;
+  color: #8B1A1A;
+}
+
+.dropout-comparison-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  margin-top: 0.75rem;
+}
+
+.dropout-comparison-table th {
+  background-color: #1C1C1C;
+  color: #FAF8F5;
+  padding: 0.55rem 0.85rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.dropout-comparison-table td {
+  padding: 0.55rem 0.85rem;
+  border-bottom: 1px solid #e8e4de;
+  vertical-align: middle;
+}
+
+.dropout-comparison-table tr:last-child td {
+  border-bottom: none;
+}
+
+.dropout-comparison-table tr:nth-child(even) td {
+  background-color: #f7f4f0;
+}
+
+.dropout-member-row td {
+  background-color: #fff3f3 !important;
+  color: #8B1A1A;
+  font-style: italic;
+}
+
+.dropout-results-wrap {
+  overflow-x: auto;
+  border: 1px solid #ddd9d2;
+  border-radius: 4px;
+}
+
+#dropout-results .calc-error {
+  margin-top: 1rem;
+}

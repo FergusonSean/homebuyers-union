@@ -209,6 +209,29 @@
       </div>
 
       <div id="ledger-area"></div>
+
+      <div id="dropout-section" class="dropout-section">
+        <h3 class="dropout-heading">Model a dropout</h3>
+        <p class="dropout-desc">See how the group's timeline changes if one member stops paying.</p>
+        <form class="dropout-form" id="dropout-form" novalidate>
+          <div class="dropout-fields">
+            <div class="calc-field">
+              <label class="calc-label" for="dropout-member">Member who drops out</label>
+              <select class="calc-input" id="dropout-member"></select>
+            </div>
+            <div class="calc-field">
+              <label class="calc-label" for="dropout-month">Dropout month</label>
+              <input class="calc-input" type="number" id="dropout-month" min="1" step="1" value="12">
+            </div>
+            <div class="calc-field">
+              <label class="calc-label" for="dropout-sale-price">Sale price if already housed ($)</label>
+              <input class="calc-input" type="number" id="dropout-sale-price" min="0" step="1000">
+            </div>
+          </div>
+          <button class="btn btn--outline" type="submit">Run dropout scenario</button>
+        </form>
+        <div id="dropout-results"></div>
+      </div>
     </div>
   </section>
 
@@ -989,6 +1012,9 @@
       }
 
       renderComparison(models, inputs);
+
+      // Sync the dropout form with the freshly computed inputs and base result.
+      dropoutSyncAfterCalculation(inputs, models[0]);
     }
 
     // Wire up inputs that should trigger renderMemberPriceInputs in addition to runCalculation.
@@ -1007,6 +1033,180 @@
       const id = e.target.id;
       if (id === "groupSize" || id === "homePrice" || id.startsWith("memberPrice-")) return;
       runCalculation();
+    });
+
+    // ── Dropout scenario wiring ──────────────────────────────────────────
+
+    // Stores the most recent inputs and parallel (K=0) result for use in dropout runs.
+    var _lastDropoutInputs = null;
+    var _lastBaseResult    = null;
+
+    // Called at the end of runCalculation to keep the dropout form in sync.
+    function dropoutSyncAfterCalculation(inputs, baseResult) {
+      _lastDropoutInputs = inputs;
+      _lastBaseResult    = baseResult;
+      populateDropoutMemberSelect(inputs.groupSize);
+      syncDropoutSalePrice();
+      // Clear stale results whenever the main inputs change.
+      document.getElementById("dropout-results").innerHTML = "";
+    }
+
+    // Populates the dropout member select with one option per group member.
+    function populateDropoutMemberSelect(groupSize) {
+      var select = document.getElementById("dropout-member");
+      var previousValue = select.value;
+      select.innerHTML = "";
+      for (var i = 1; i <= groupSize; i++) {
+        var option = document.createElement("option");
+        option.value       = i - 1; // 0-based index
+        option.textContent = "Member " + i;
+        select.appendChild(option);
+      }
+      // Preserve the previously selected member if still valid.
+      if (previousValue !== "" && parseInt(previousValue) < groupSize) {
+        select.value = previousValue;
+      }
+    }
+
+    // Sets the sale price input default to the selected member's home price.
+    function syncDropoutSalePrice() {
+      if (!_lastDropoutInputs) return;
+      var memberIdx   = parseInt(document.getElementById("dropout-member").value);
+      var memberPrice = (_lastDropoutInputs.homePrices && _lastDropoutInputs.homePrices[memberIdx])
+        || _lastDropoutInputs.homePrice;
+      document.getElementById("dropout-sale-price").value = memberPrice;
+    }
+
+    document.getElementById("dropout-member").addEventListener("change", syncDropoutSalePrice);
+
+    // Renders the dropout scenario results: event summary and comparison table.
+    function renderDropoutResults(baseResult, dropoutResult, inputs) {
+      var container = document.getElementById("dropout-results");
+
+      if (dropoutResult.error) {
+        container.innerHTML = '<p class="calc-error">' + dropoutResult.error + "</p>";
+        return;
+      }
+
+      var dropout      = dropoutResult.dropout;
+      var dropoutIdx   = dropout.memberIndex;
+      var dropoutEvent = dropoutResult.ledger.find(function (e) { return e.dropoutEvent; });
+      var saleEvent    = dropoutResult.ledger.find(function (e) { return e.saleEvent; });
+
+      // Build the event summary block.
+      var summaryHtml = "";
+      if (dropoutEvent) {
+        var ev = dropoutEvent.dropoutEvent;
+        if (ev.type === "pre-move-in") {
+          summaryHtml =
+            '<div class="dropout-event-summary">' +
+            "<strong>Pre-move-in dropout (month " + dropout.month + ")</strong>" +
+            "Member " + (dropoutIdx + 1) + " had not yet been housed. The fund refunded their C1 contributions: " +
+            "<strong>" + formatDollars(ev.c1Refund) + "</strong> withdrawn from the fund balance. " +
+            "Their home position is permanently skipped \u2014 the group continues with " + (inputs.groupSize - 1) + " members." +
+            "</div>";
+        } else {
+          var proceedsSign = saleEvent && saleEvent.saleEvent.proceeds >= 0 ? "+" : "";
+          var proceedsText = saleEvent
+            ? proceedsSign + formatDollars(Math.abs(saleEvent.saleEvent.proceeds)) + " " +
+              (saleEvent.saleEvent.proceeds >= 0 ? "returned to" : "absorbed by") +
+              " fund at month " + saleEvent.month +
+              " (sale price " + formatDollars(dropout.salePrice) +
+              " &minus; remaining balance " + formatDollars(saleEvent.saleEvent.remainingBalance) + ")"
+            : "(sale pending)";
+          summaryHtml =
+            '<div class="dropout-event-summary">' +
+            "<strong>Post-move-in dropout (month " + dropout.month + ")</strong>" +
+            "Member " + (dropoutIdx + 1) + " was already housed. They stopped paying C2. " +
+            "The fund serviced their mortgage for 2 more months, then sold the house: " +
+            proceedsText + "." +
+            "</div>";
+        }
+      } else {
+        summaryHtml =
+          '<div class="dropout-event-summary">' +
+          "<strong>Dropout not triggered</strong>" +
+          "The simulation ended before month " + dropout.month + " \u2014 no dropout occurred. " +
+          "All members were housed and mortgages paid off normally." +
+          "</div>";
+      }
+
+      // Build the comparison table: one row per member.
+      var N       = inputs.groupSize;
+      var basePos = baseResult.positions;
+      var droPos  = dropoutResult.positions;
+
+      var headerRow =
+        "<tr>" +
+        "<th>Member</th>" +
+        "<th>Months to move-in (baseline)</th>" +
+        "<th>Months to move-in (dropout scenario)</th>" +
+        "<th>Total paid (baseline)</th>" +
+        "<th>Total paid (dropout scenario)</th>" +
+        "</tr>";
+
+      var dataRows = Array.from({ length: N }, function (_, k) {
+        if (k === dropoutIdx && dropoutEvent) {
+          var paidBefore = formatDollars(droPos[k].totalPaid);
+          var baselineHoused = basePos[k].monthsUntilHoused !== null
+            ? formatMonths(basePos[k].monthsUntilHoused) : "\u2014";
+          return "<tr class=\"dropout-member-row\">" +
+            "<td>Member " + (k + 1) + " (dropout)</td>" +
+            "<td>" + baselineHoused + "</td>" +
+            "<td>Dropped out (month " + dropout.month + ")</td>" +
+            "<td>" + formatDollars(basePos[k].totalPaid) + "</td>" +
+            "<td>" + paidBefore + " paid before dropout</td>" +
+            "</tr>";
+        }
+
+        var baseM = basePos[k].monthsUntilHoused;
+        var droM  = droPos[k].monthsUntilHoused;
+        var baseP = basePos[k].totalPaid;
+        var droP  = droPos[k].totalPaid;
+
+        var mCls = (droM !== null && baseM !== null)
+          ? (droM < baseM ? "cmp-better" : droM > baseM ? "cmp-worse" : "")
+          : "";
+        var pCls = droP < baseP ? "cmp-better" : droP > baseP ? "cmp-worse" : "";
+
+        var mBase = baseM !== null ? formatMonths(baseM) : "\u2014";
+        var mDro  = droM  !== null ? formatMonths(droM)  : "not housed";
+
+        return "<tr>" +
+          "<td>Member " + (k + 1) + "</td>" +
+          "<td>" + mBase + "</td>" +
+          "<td><span class=\"" + mCls + "\">" + mDro + "</span></td>" +
+          "<td>" + formatDollars(baseP) + "</td>" +
+          "<td><span class=\"" + pCls + "\">" + formatDollars(droP) + "</span></td>" +
+          "</tr>";
+      }).join("");
+
+      container.innerHTML =
+        summaryHtml +
+        '<p class="calc-note" style="margin-bottom:0.5rem">' +
+        '<span class="cmp-better-key">Green</span> = improved vs baseline. ' +
+        '<span class="cmp-worse-key">Red</span> = worse vs baseline.' +
+        "</p>" +
+        '<div class="dropout-results-wrap">' +
+        '<table class="dropout-comparison-table">' +
+        "<thead>" + headerRow + "</thead>" +
+        "<tbody>" + dataRows + "</tbody>" +
+        "</table>" +
+        "</div>";
+    }
+
+    document.getElementById("dropout-form").addEventListener("submit", function (e) {
+      e.preventDefault();
+      if (!_lastDropoutInputs || !_lastBaseResult) return;
+
+      var memberIdx = parseInt(document.getElementById("dropout-member").value);
+      var month     = parseInt(document.getElementById("dropout-month").value);
+      var salePrice = parseFloat(document.getElementById("dropout-sale-price").value) || 0;
+
+      var dropout = { memberIndex: memberIdx, month: month, salePrice: salePrice };
+      var result  = calculateGroupWithDropout(_lastDropoutInputs, 0, dropout);
+
+      renderDropoutResults(_lastBaseResult, result, _lastDropoutInputs);
     });
 
     renderMemberPriceInputs();
