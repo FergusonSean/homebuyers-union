@@ -394,6 +394,7 @@
       if (waiting > 0 && e.c1Income > 0) parts.push(`${waiting}x${formatDollars(e.c1Income / waiting)} C1`);
       if (e.donorIncome        > 0) parts.push(`${formatDollars(e.donorIncome)} donor`);
       if (e.fundInterestEarned > 0) parts.push(`${formatDollars(e.fundInterestEarned)} interest`);
+      if (e.fundInterestEarned < 0) parts.push(`<span class="ledger-negative">\u2212${formatDollars(Math.abs(e.fundInterestEarned))} interest</span>`);
       return parts.join(" + ");
     }
 

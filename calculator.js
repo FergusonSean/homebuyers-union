@@ -276,7 +276,7 @@ function calculateGroup(inputs, sequentialCount = 0) {
         return { error: "Simulation exceeded 1200 months. Try different inputs.", positions: null, totalMonths: null, traditional: null, ledger: null };
       }
       for (let i = 0; i < N; i++) totalPaid[i] += i < k ? c2 : c1;
-      const fundInterestEarned = savingFund * fundR;
+      const fundInterestEarned = savingFund >= 0 ? savingFund * fundR : savingFund * r;
       savingFund += savingC2 + savingC1 + monthlyDonorContrib + fundInterestEarned - housingCostsCumulative[k];
       month++;
       ledger.push({
@@ -367,7 +367,7 @@ function calculateGroup(inputs, sequentialCount = 0) {
     const preHouseMembers    = N - housedCount;
     const c2Income           = postHouseMembers * c2;
     const c1Income           = preHouseMembers  * c1;
-    const fundInterestEarned = fundBalance * fundR;
+    const fundInterestEarned = fundBalance >= 0 ? fundBalance * fundR : fundBalance * r;
     const totalIncome        = c2Income + c1Income + monthlyDonorContrib + fundInterestEarned;
 
     // Sum mortgage payments only for Phase-B positions that have a live mortgage.
@@ -663,7 +663,7 @@ function calculateGroupSequential(inputs) {
       for (let i = 0; i < N; i++) {
         totalPaid[i] += i < k ? c2 : c1;
       }
-      const fundInterestEarned = fundBalance * fundR;
+      const fundInterestEarned = fundBalance >= 0 ? fundBalance * fundR : fundBalance * r;
       fundBalance += savingIncome + fundInterestEarned - housingCostsCumulative[k];
       month++;
 
@@ -1006,7 +1006,7 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
         totalPaid[i] += i < k ? c2 : c1;
       }
 
-      const fundInterestEarned = savingFund * fundR;
+      const fundInterestEarned = savingFund >= 0 ? savingFund * fundR : savingFund * r;
       savingFund += c2Income + c1Income + monthlyDonorContrib + fundInterestEarned - savingPhaseCosts;
       month++;
 
@@ -1277,7 +1277,7 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
 
     const c2Income           = postHouseMembers * c2;
     const c1Income           = preHouseMembers  * c1;
-    const fundInterestEarned = fundBalance * fundR;
+    const fundInterestEarned = fundBalance >= 0 ? fundBalance * fundR : fundBalance * r;
     const totalIncome        = c2Income + c1Income + monthlyDonorContrib + fundInterestEarned;
 
     // Sum mortgage obligations: Phase-B mortgages only. Pending-sale mortgage still paid until sale.
