@@ -748,8 +748,13 @@
       `;
 
       // Ledger buttons + containers.
+      // When dropout is active, substitute each baseline result with the dropout model's result
+      // so the ledger reflects the actual dropout simulation, not the full-group baseline.
       const allLedgerModels = [
-        ...allModels,
+        ...allModels.map(m => {
+          const dr = dropoutResults && dropoutResults[m.k];
+          return (dr && !dr.error) ? { ...m, result: dr } : m;
+        }),
         { key: "traditional",       label: "Traditional",             result: tradResult,      type: "traditional-standard" },
         { key: "traditional-accel", label: "Traditional (same payments)", result: tradAccelResult, type: "traditional-accel" },
       ];

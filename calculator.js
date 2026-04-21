@@ -990,9 +990,10 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
         return { error: "Simulation exceeded 1200 months. Try different inputs.", positions: null, totalMonths: null, traditional: null, ledger: null };
       }
 
-      // Income from contributing members only.
-      const c2Income = Array.from({ length: k }, (_, i) => contributing[i] ? c2 : 0).reduce((a, b) => a + b, 0);
-      const c1Income = Array.from({ length: N - k }, (_, i) => contributing[k + i] ? c1 : 0).reduce((a, b) => a + b, 0);
+      // Income from contributing members only; also track contributing counts for ledger display.
+      let c2Income = 0, c1Income = 0, contributingHoused = 0, contributingWaiting = 0;
+      for (let i = 0; i < k;     i++) { if (contributing[i]) { c2Income += c2; contributingHoused++;  } }
+      for (let i = k; i < N;     i++) { if (contributing[i]) { c1Income += c1; contributingWaiting++; } }
 
       for (let i = 0; i < N; i++) {
         if (!contributing[i]) continue;
@@ -1007,8 +1008,8 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
         month,
         phase:          'saving',
         houseIndex:     k + 1,
-        housedMembers:  k,
-        waitingMembers: N - k,
+        housedMembers:  contributingHoused,
+        waitingMembers: contributingWaiting,
         c2Income,
         c1Income,
         donorIncome:    monthlyDonorContrib,
@@ -1104,10 +1105,11 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
         return { error: "Simulation exceeded 1200 months. Try different inputs.", positions: null, totalMonths: null, traditional: null, ledger: null };
       }
 
-      // Income from contributing members only.
-      // At this point k+1 members are housed (0..k) and N-k-1 are waiting (k+1..N-1).
-      const c2Income = Array.from({ length: k + 1 }, (_, i) => contributing[i] ? c2 : 0).reduce((a, b) => a + b, 0);
-      const c1Income = Array.from({ length: N - k - 1 }, (_, i) => contributing[k + 1 + i] ? c1 : 0).reduce((a, b) => a + b, 0);
+      // Income from contributing members only; also track contributing counts for ledger display.
+      // At this point k+1 positions are housed (0..k) and N-k-1 are waiting (k+1..N-1).
+      let c2Income = 0, c1Income = 0, contributingHoused = 0, contributingWaiting = 0;
+      for (let i = 0;     i <= k; i++) { if (contributing[i]) { c2Income += c2; contributingHoused++;  } }
+      for (let i = k + 1; i < N;  i++) { if (contributing[i]) { c1Income += c1; contributingWaiting++; } }
 
       for (let i = 0; i < N; i++) {
         if (!contributing[i]) continue;
@@ -1132,8 +1134,8 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
         month,
         phase:          'payoff',
         houseIndex:     k + 1,
-        housedMembers:  k + 1,
-        waitingMembers: N - k - 1,
+        housedMembers:  contributingHoused,
+        waitingMembers: contributingWaiting,
         c2Income,
         c1Income,
         donorIncome:    monthlyDonorContrib,
