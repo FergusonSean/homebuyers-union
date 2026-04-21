@@ -25,7 +25,7 @@
     <div class="hero__inner">
       <h1 class="hero__headline">Own your home.<br>Together.</h1>
       <p class="hero__subhead">A union of homebuyers pooling resources to buy houses for each member — faster and cheaper than a mortgage alone.</p>
-      <a href="#waitlist" class="btn btn--primary">Join the waitlist</a>
+      <a href="#calculator" class="btn btn--primary">Try the calculator</a>
     </div>
   </section>
 
@@ -241,7 +241,7 @@
         </div>
         <div>
           <p>This is also for people who want collective power over individual debt. The mortgage system is built to extract as much interest as possible from as many individuals as possible, each isolated, each negotiating alone. A union changes that dynamic. You are not one borrower — you are part of a group that the fund serves.</p>
-          <p>You don't need perfect credit to join a waitlist. You don't need a large down payment saved. You need a steady income and the ability to commit to a monthly contribution for a long time. That's the contract.</p>
+          <p>You don't need perfect credit. You don't need a large down payment saved. You need a steady income and the ability to commit to a monthly contribution for a long time. That's the contract.</p>
           <p>If you've ever wondered whether there's a different way to do this — not an investment, not a gimmick, just people helping people buy homes — this is it.</p>
         </div>
       </div>
@@ -273,33 +273,6 @@
     </div>
   </section>
 
-  <!-- ── Waitlist ────────────────────────────────────────────────────── -->
-  <section class="section section--red reveal" id="waitlist">
-    <div class="container container--narrow">
-      <h2 class="section__headline section__headline--light">Get on the waitlist</h2>
-      <p class="section__lead section__lead--light">We're building the first cohorts now. Tell us where you are and we'll be in touch when a group forms near you.</p>
-
-      <form class="waitlist-form" id="waitlist-form" action="https://formspree.io/f/placeholder" method="POST">
-        <div class="waitlist-field">
-          <label class="waitlist-label" for="wl-name">Your name</label>
-          <input class="waitlist-input" type="text" id="wl-name" name="name" autocomplete="name" required placeholder="First and last name">
-        </div>
-        <div class="waitlist-field">
-          <label class="waitlist-label" for="wl-email">Email address</label>
-          <input class="waitlist-input" type="email" id="wl-email" name="email" autocomplete="email" required placeholder="you@example.com">
-        </div>
-        <div class="waitlist-field">
-          <label class="waitlist-label" for="wl-city">City</label>
-          <input class="waitlist-input" type="text" id="wl-city" name="city" autocomplete="address-level2" required placeholder="City, state">
-        </div>
-        <button class="btn btn--white" type="submit">Join the waitlist</button>
-      </form>
-
-      <p class="waitlist-success" id="waitlist-success" hidden>
-        You're on the list. We'll be in touch.
-      </p>
-    </div>
-  </section>
 
   <!-- ── Footer ─────────────────────────────────────────────────────── -->
   <footer class="footer">
@@ -327,25 +300,6 @@
 
     document.querySelectorAll(".reveal").forEach((el) => {
       revealObserver.observe(el);
-    });
-
-    // ── Waitlist form ────────────────────────────────────────────────
-    document.getElementById("waitlist-form").addEventListener("submit", function (e) {
-      e.preventDefault();
-      const form = this;
-      const successMsg = document.getElementById("waitlist-success");
-
-      fetch(form.action, {
-        method: "POST",
-        body: new FormData(form),
-        headers: { Accept: "application/json" },
-      }).then(() => {
-        form.hidden = true;
-        successMsg.hidden = false;
-      }).catch(() => {
-        form.hidden = true;
-        successMsg.hidden = false;
-      });
     });
 
     // ── Calculator DOM wiring ────────────────────────────────────────
