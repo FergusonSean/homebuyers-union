@@ -1089,7 +1089,9 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
     // If the dropout member was at position k and dropped out pre-move-in, skip k.
     if (skipThisK) {
       // housedAtMonth[k] stays null; the sequential position k is abandoned.
-      // carryover stays 0 (the c1Refund already reduced savingFund).
+      // savingFund already has the c1Refund deducted — pass it as carryover so the
+      // next position doesn't lose the savings accumulated before the dropout.
+      carryover = savingFund;
       continue;
     }
 
