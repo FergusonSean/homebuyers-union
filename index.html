@@ -394,7 +394,6 @@
       if (waiting > 0 && e.c1Income > 0) parts.push(`${waiting}x${formatDollars(e.c1Income / waiting)} C1`);
       if (e.donorIncome        > 0) parts.push(`${formatDollars(e.donorIncome)} donor`);
       if (e.fundInterestEarned > 0) parts.push(`${formatDollars(e.fundInterestEarned)} interest`);
-      if (e.fundInterestEarned < 0) parts.push(`<span class="ledger-negative">\u2212${formatDollars(Math.abs(e.fundInterestEarned))} interest</span>`);
       return parts.join(" + ");
     }
 
@@ -428,11 +427,14 @@
         const housed        = e.postHouseMembers ?? e.housedMembers  ?? 0;
         const waiting       = e.preHouseMembers  ?? e.waitingMembers ?? 0;
         const membersCell   = `${housed} in / ${waiting} waiting`;
-        const effectiveInc  = e.totalIncome - e.housingCosts;
-        const housingLine   = e.housingCosts > 0
-          ? `<span class="ledger-sub">${incomeFormula(e)}</span><span class="ledger-sub">&minus;${formatDollars(e.housingCosts)} tax/ins/maint</span>`
-          : `<span class="ledger-sub">${incomeFormula(e)}</span>`;
-        const incomeCell    = `${formatDollars(effectiveInc)}${housingLine}`;
+        const effectiveInc   = e.totalIncome - e.housingCosts;
+        const interestLine   = e.fundInterestEarned < 0
+          ? `<span class="ledger-sub ledger-negative">&minus;${formatDollars(Math.abs(e.fundInterestEarned))} interest</span>`
+          : '';
+        const housingCostLine = e.housingCosts > 0
+          ? `<span class="ledger-sub">&minus;${formatDollars(e.housingCosts)} tax/ins/maint</span>`
+          : '';
+        const incomeCell     = `${formatDollars(effectiveInc)}<span class="ledger-sub">${incomeFormula(e)}</span>${interestLine}${housingCostLine}`;
 
         const fmtFund = n => n < 0
           ? `<span class="ledger-negative">\u2212${formatDollars(n)}</span>`
