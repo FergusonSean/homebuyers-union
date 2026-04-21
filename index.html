@@ -397,170 +397,146 @@
       return parts.join(" + ");
     }
 
-    function renderLedger(result, phaseLabels = {}) {
-      const phase1 = result.ledger.filter(e => e.phase === 1);
-      const phase2 = result.ledger.filter(e => e.phase === 2);
+    function renderUnifiedLedger(result) {
+      const firstB1     = result.ledger.find(e => e.phase === 1);
+      const mortgageStd = firstB1 ? firstB1.mortgagePaymentStd : null;
 
-      // mortgagePaymentStd is null when member home prices differ (variable payments).
-      const mortgageStd = phase1[0] ? phase1[0].mortgagePaymentStd : null;
-
-      // ── Phase 1: 6 columns ───────────────────────────────────────────────
-      // Each income and obligations cell shows the total on top and the
-      // formula breakdown as a small sub-line below.
-      const p1Rows = phase1.map(e => {
-        const obFormula = e.activeMortgages > 0
-          ? (mortgageStd !== null
-              ? `${e.activeMortgages} mortgage${e.activeMortgages > 1 ? "s" : ""} x ${formatDollars(mortgageStd)}`
-              : `${e.activeMortgages} mortgage${e.activeMortgages > 1 ? "s" : ""} (variable payments)`)
-          : "none yet";
-        const housingLine = e.housingCosts > 0
-          ? `<span class="ledger-sub">&minus;${formatDollars(e.housingCosts)} tax/ins/maint</span>` : "";
-
-        let balanceCell = `${e.netGrowth >= 0 ? "+" : "-"}${formatDollars(Math.abs(e.netGrowth))} &rarr; ${formatDollars(e.fundBalanceAfterGrowth)}`;
-        const eventParts = [];
-        if (e.housePurchased) {
-          const withdrawLabel = e.housePurchased.closingCosts > 0
-            ? `down + closing`
-            : `down payment`;
-          balanceCell += `<span class="ledger-sub">-${formatDollars(e.housePurchased.downPaymentWithdrawn)} ${withdrawLabel} &rarr; ${formatDollars(e.fundBalanceEnd)}</span>`;
-          eventParts.push(`<strong class="ledger-event">House ${e.housePurchased.position}</strong>`);
-        }
+      function buildEventNotes(e) {
+        const notes = [];
         if (e.dropoutEvent) {
           const m = e.dropoutEvent.memberIndex + 1;
           if (e.dropoutEvent.type === 'pre-move-in') {
-            eventParts.push(`<strong class="ledger-event">Member ${m} exited</strong>` +
+            notes.push(`<strong class="ledger-event">Member ${m} exited</strong>` +
               (e.dropoutEvent.c1Refund > 0 ? `<span class="ledger-sub">${formatDollars(e.dropoutEvent.c1Refund)} refunded from fund</span>` : ''));
           } else {
-            eventParts.push(`<strong class="ledger-event">Member ${m} exited</strong>` +
+            notes.push(`<strong class="ledger-event">Member ${m} exited</strong>` +
               `<span class="ledger-sub">sale pending mo. ${e.dropoutEvent.saleMonth}</span>`);
           }
         }
         if (e.saleEvent) {
           const proceeds = e.saleEvent.proceeds;
           const sign     = proceeds >= 0 ? "+" : "\u2212";
-          eventParts.push(`<strong class="ledger-event">Sale proceeds ${sign}${formatDollars(Math.abs(proceeds))} to fund</strong>` +
+          notes.push(`<strong class="ledger-event">Sale proceeds ${sign}${formatDollars(Math.abs(proceeds))} to fund</strong>` +
             `<span class="ledger-sub">${formatDollars(e.saleEvent.salePrice)} price &minus; ${formatDollars(e.saleEvent.remainingBalance)} balance</span>`);
         }
-        const eventCell = eventParts.join('');
+        return notes;
+      }
 
-        return `<tr${(e.housePurchased || e.saleEvent) ? ' class="ledger-purchase-row"' : ''}>
-          <td class="ledger-month">${e.month}</td>
-          <td class="ledger-housed">${e.postHouseMembers} in / ${e.preHouseMembers} waiting</td>
-          <td class="ledger-num">${formatDollars(e.totalIncome - e.housingCosts)}<span class="ledger-sub">${incomeFormula(e)}</span>${housingLine}</td>
-          <td class="ledger-num">${formatDollars(e.totalObligations)}<span class="ledger-sub">${obFormula}</span></td>
-          <td class="ledger-balance">${balanceCell}</td>
-          <td>${eventCell}</td>
-        </tr>`;
-      }).join("");
+      const rows = result.ledger.map(e => {
+        const notes         = buildEventNotes(e);
+        const housed        = e.postHouseMembers ?? e.housedMembers  ?? 0;
+        const waiting       = e.preHouseMembers  ?? e.waitingMembers ?? 0;
+        const membersCell   = `${housed} in / ${waiting} waiting`;
+        const effectiveInc  = e.totalIncome - e.housingCosts;
+        const housingLine   = e.housingCosts > 0
+          ? `<span class="ledger-sub">${incomeFormula(e)}</span><span class="ledger-sub">&minus;${formatDollars(e.housingCosts)} tax/ins/maint</span>`
+          : `<span class="ledger-sub">${incomeFormula(e)}</span>`;
+        const incomeCell    = `${formatDollars(effectiveInc)}${housingLine}`;
 
-      // ── Phase 2: 5 columns ───────────────────────────────────────────────
-      // Mortgage details stack into one cell — one line per mortgage showing
-      // before/after balance with interest and principal as a sub-line.
-      const p2Rows = phase2.map(e => {
-        const obFormula = mortgageStd !== null
-          ? `${e.activeMortgages} x ${formatDollars(mortgageStd)}`
-          : `${e.activeMortgages} mortgage${e.activeMortgages !== 1 ? "s" : ""} (variable payments)`;
-        const housingLine = e.housingCosts > 0
-          ? `<span class="ledger-sub">&minus;${formatDollars(e.housingCosts)} tax/ins/maint</span>` : "";
+        let phaseLabel, fundCell, mortgageCell, isHighlighted = false;
 
-        const mortgageLines = e.mortgageDetails.map(d => {
-          if (d.balanceBefore === 0 && d.balanceAfter === 0) {
-            return `<span class="ledger-paid-off">#${d.position} paid off</span>`;
+        if (e.phase === 'saving') {
+          phaseLabel  = `Saving H${e.houseIndex + 1}`;
+          fundCell    = `${formatDollars(e.fundBalance)} / ${formatDollars(e.downPaymentTarget)}`;
+          mortgageCell = '&mdash;';
+          if (e.housePurchased) {
+            notes.unshift(`<strong class="ledger-event">Purchased &mdash; ${formatDollars(e.downPaymentTarget)} withdrawn</strong>`);
+            isHighlighted = true;
           }
-          const extra = d.extraPrincipal > 0
-            ? ` + <span class="ledger-extra">${formatDollars(d.extraPrincipal)} surplus</span>` : "";
-          const detail = `interest ${formatDollars(d.interestCharged)} + principal ${formatDollars(d.principalFromPayment)}${extra}`;
-          return `<span class="ledger-mortgage-line">#${d.position}: ${formatDollars(d.balanceBefore)} &rarr; ${formatDollars(d.balanceAfter)}<span class="ledger-sub">${detail}</span></span>`;
-        }).join("");
+          if (e.saleEvent) isHighlighted = true;
 
-        return `<tr>
+        } else if (e.phase === 'payoff') {
+          phaseLabel   = `Payoff H${e.houseIndex + 1}`;
+          fundCell     = '&mdash;';
+          const detail = `interest ${formatDollars(e.interestCharged)} + principal ${formatDollars(e.principalPaid)}` +
+            (e.overpayment > 0 ? ` + <span class="ledger-extra">${formatDollars(e.overpayment)} surplus</span>` : '');
+          mortgageCell = `${formatDollars(e.mortgageBalanceBefore)} &rarr; ${formatDollars(e.mortgageBalanceAfter)}<span class="ledger-sub">${detail}</span>`;
+          if (e.mortgageBalanceAfter === 0) {
+            notes.unshift(`<strong class="ledger-event">Paid off</strong>` +
+              (e.overpayment > 0 ? ` <span class="ledger-extra">+${formatDollars(e.overpayment)} to next</span>` : ''));
+            isHighlighted = true;
+          }
+          if (e.saleEvent) isHighlighted = true;
+
+        } else if (e.phase === 1) {
+          phaseLabel      = 'Buying';
+          let fundStr     = `${e.netGrowth >= 0 ? "+" : "\u2212"}${formatDollars(Math.abs(e.netGrowth))} &rarr; ${formatDollars(e.fundBalanceAfterGrowth)}`;
+          if (e.housePurchased) {
+            const wLabel  = e.housePurchased.closingCosts > 0 ? 'down + closing' : 'down payment';
+            fundStr      += `<span class="ledger-sub">&minus;${formatDollars(e.housePurchased.downPaymentWithdrawn)} ${wLabel} &rarr; ${formatDollars(e.fundBalanceEnd)}</span>`;
+            notes.unshift(`<strong class="ledger-event">House ${e.housePurchased.position}</strong>`);
+            isHighlighted = true;
+          }
+          if (e.saleEvent) isHighlighted = true;
+          fundCell     = fundStr;
+          if (e.activeMortgages > 0) {
+            const obLine = mortgageStd !== null
+              ? `${e.activeMortgages} mortgage${e.activeMortgages > 1 ? 's' : ''} x ${formatDollars(mortgageStd)}`
+              : `${e.activeMortgages} mortgage${e.activeMortgages > 1 ? 's' : ''} (variable)`;
+            mortgageCell = `${formatDollars(e.totalObligations)}<span class="ledger-sub">${obLine}</span>`;
+          } else {
+            mortgageCell = '&mdash;';
+          }
+
+        } else {
+          phaseLabel   = 'Paying off';
+          fundCell     = '&mdash;';
+          mortgageCell = e.mortgageDetails.map(d => {
+            if (d.balanceBefore === 0 && d.balanceAfter === 0) {
+              return `<span class="ledger-paid-off">#${d.position} paid off</span>`;
+            }
+            const extra  = d.extraPrincipal > 0
+              ? ` + <span class="ledger-extra">${formatDollars(d.extraPrincipal)} surplus</span>` : '';
+            const detail = `interest ${formatDollars(d.interestCharged)} + principal ${formatDollars(d.principalFromPayment)}${extra}`;
+            return `<span class="ledger-mortgage-line">#${d.position}: ${formatDollars(d.balanceBefore)} &rarr; ${formatDollars(d.balanceAfter)}<span class="ledger-sub">${detail}</span></span>`;
+          }).join('');
+        }
+
+        return `<tr${isHighlighted ? ' class="ledger-purchase-row"' : ''}>
           <td class="ledger-month">${e.month}</td>
-          <td class="ledger-num">${formatDollars(e.totalIncome - e.housingCosts)}<span class="ledger-sub">${incomeFormula(e)}</span>${housingLine}</td>
-          <td class="ledger-num">${formatDollars(e.totalObligations)}<span class="ledger-sub">${obFormula}</span></td>
-          <td class="ledger-pos">${formatDollars(e.surplus)}</td>
-          <td class="ledger-mortgages">${mortgageLines}</td>
+          <td class="ledger-phase">${phaseLabel}</td>
+          <td class="ledger-housed">${membersCell}</td>
+          <td class="ledger-num">${incomeCell}</td>
+          <td class="ledger-balance">${fundCell}</td>
+          <td class="ledger-mortgages">${mortgageCell}</td>
+          <td>${notes.join('')}</td>
         </tr>`;
-      }).join("");
+      }).join('');
 
-      const p1Label = phaseLabels.p1 || "Phase 1 \u2014 Buying houses";
-      const p2Label = phaseLabels.p2 || "Phase 2 \u2014 Paying off mortgages";
+      const hasPhaseA   = result.ledger.some(e => e.phase === 'saving' || e.phase === 'payoff');
+      const hasPhaseB   = result.ledger.some(e => e.phase === 1 || e.phase === 2);
+      const firstSaving = result.ledger.find(e => e.phase === 'saving');
+      const notesParts  = [];
+      if (hasPhaseA && firstSaving) {
+        const targetLabel = firstSaving.closingCosts > 0 ? 'Purchase target (down + closing)' : 'Down payment target';
+        notesParts.push(`${targetLabel}: ${formatDollars(firstSaving.downPaymentTarget)}. Saving: fund grows to target then purchased; Payoff: all income to mortgage.`);
+      }
+      if (hasPhaseB) {
+        notesParts.push(mortgageStd !== null
+          ? `Standard mortgage payment: ${formatDollars(mortgageStd)}/mo. Buying: net income added to fund; Paying off: surplus goes to highest balance (green).`
+          : `Mortgage payments vary by member price. Buying: net income added to fund; Paying off: surplus goes to highest balance (green).`);
+      }
 
       return `
-        <div class="ledger-section">
-          <h3 class="ledger-heading">${p1Label}</h3>
-          <p class="ledger-formula-key">
-            ${mortgageStd !== null
-              ? `Standard mortgage payment: ${formatDollars(mortgageStd)}/mo per house owned.`
-              : `Mortgage payments vary by member home price.`}
-            Net = (income &minus; tax/ins/maint) &minus; mortgage obligations, added to fund each month.
-            Highlighted rows show a house purchase — down payment withdrawn from fund.
-          </p>
-          <div class="ledger-scroll">
-            <table class="ledger-table">
-              <colgroup>
-                <col style="width:6%">
-                <col style="width:14%">
-                <col style="width:18%">
-                <col style="width:18%">
-                <col style="width:30%">
-                <col style="width:14%">
-              </colgroup>
-              <thead><tr>
-                <th>Month</th><th>In / Waiting</th><th>Income</th><th>Obligations</th><th>Net &rarr; Balance</th><th>Event</th>
-              </tr></thead>
-              <tbody>${p1Rows}</tbody>
-            </table>
-          </div>
-        </div>
-
-        <div class="ledger-section">
-          <h3 class="ledger-heading">${p2Label}</h3>
-          <p class="ledger-formula-key">
-            All members pay C2. Surplus above required payments goes to the highest remaining balance (shown in green).
-            Each mortgage line shows balance before and after, with interest and principal paid as a sub-line.
-          </p>
-          <div class="ledger-scroll">
-            <table class="ledger-table">
-              <colgroup>
-                <col style="width:6%">
-                <col style="width:20%">
-                <col style="width:18%">
-                <col style="width:10%">
-                <col style="width:46%">
-              </colgroup>
-              <thead><tr>
-                <th>Month</th><th>Income</th><th>Obligations</th><th>Surplus</th><th>Mortgage balances</th>
-              </tr></thead>
-              <tbody>${p2Rows}</tbody>
-            </table>
-          </div>
+        <p class="ledger-formula-key">${notesParts.join(' ')}</p>
+        <div class="ledger-scroll">
+          <table class="ledger-table">
+            <colgroup>
+              <col style="width:5%">
+              <col style="width:10%">
+              <col style="width:12%">
+              <col style="width:18%">
+              <col style="width:20%">
+              <col style="width:22%">
+              <col style="width:13%">
+            </colgroup>
+            <thead><tr>
+              <th>Month</th><th>Phase</th><th>Members</th><th>Net Income</th><th>Fund</th><th>Mortgages</th><th>Notes</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
         </div>
       `;
-    }
-
-    // ── Hybrid ledger rendering ───────────────────────────────────────────────
-    // Renders Phase A (sequential payoff section) via renderSequentialLedger,
-    // then Phase B (parallel mortgage section) via renderLedger with relabelled headings.
-
-    function renderHybridLedger(result) {
-      const seqEntries = result.ledger.filter(e => e.phase === 'saving' || e.phase === 'payoff');
-      const parEntries = result.ledger.filter(e => e.phase === 1 || e.phase === 2);
-      const K = result.sequentialCount;
-      const N = result.positions.length;
-
-      const seqHtml = seqEntries.length > 0
-        ? `<h3 class="ledger-heading" style="margin-top:1.5rem">Phase A \u2014 Sequential payoff (first ${K} home${K > 1 ? "s" : ""})</h3>` +
-          renderSequentialLedger({ ...result, ledger: seqEntries })
-        : "";
-
-      const parHtml = parEntries.length > 0
-        ? renderLedger({ ...result, ledger: parEntries }, {
-            p1: `Phase B1 \u2014 Buying remaining ${N - K} home${N - K > 1 ? "s" : ""} (parallel)`,
-            p2: "Phase B2 \u2014 Paying off remaining mortgages",
-          })
-        : "";
-
-      return seqHtml + parHtml;
     }
 
     // ── Comparison rendering ──────────────────────────────────────────────────
@@ -795,129 +771,14 @@
           container.hidden = false;
           this.textContent = hideLabel;
           if (!container.dataset.rendered) {
-            if (m.type === "parallel")            container.innerHTML = renderLedger(m.result);
-            else if (m.type === "sequential")     container.innerHTML = renderSequentialLedger(m.result);
-            else if (m.type === "traditional-standard" || m.type === "traditional-accel")
-                                                  container.innerHTML = renderTraditionalLedger(m.result, m.label);
-            else                                  container.innerHTML = renderHybridLedger(m.result);
+            if (m.type === "traditional-standard" || m.type === "traditional-accel")
+              container.innerHTML = renderTraditionalLedger(m.result, m.label);
+            else
+              container.innerHTML = renderUnifiedLedger(m.result);
             container.dataset.rendered = "1";
           }
         });
       });
-    }
-
-    // ── Sequential ledger rendering ───────────────────────────────────────────
-    // One section per house cycle. Each row is either a saving or payoff month.
-    // 6 columns: Month | Phase | Income | Fund balance | Mortgage balance | Notes
-    // "Fund balance" is populated during saving; "Mortgage balance" during payoff.
-    // Formulas and interest detail live in title tooltips, not cell text.
-
-    function renderSequentialLedger(result) {
-      const cycles = {};
-      for (const entry of result.ledger) {
-        if (!cycles[entry.houseIndex]) cycles[entry.houseIndex] = [];
-        cycles[entry.houseIndex].push(entry);
-      }
-
-      const firstSavingEntry  = result.ledger.find(e => e.phase === 'saving');
-      const downPaymentTarget = firstSavingEntry.downPaymentTarget;
-      const hasClosingCosts   = firstSavingEntry.closingCosts > 0;
-
-      const sections = Object.keys(cycles).map(houseIdx => {
-        const rows = cycles[houseIdx].map(e => {
-          const eventNotes = [];
-          if (e.dropoutEvent) {
-            const m = e.dropoutEvent.memberIndex + 1;
-            if (e.dropoutEvent.type === 'pre-move-in') {
-              eventNotes.push(`<strong class="ledger-event">Member ${m} exited</strong>` +
-                (e.dropoutEvent.c1Refund > 0 ? `<span class="ledger-sub">${formatDollars(e.dropoutEvent.c1Refund)} refunded from fund</span>` : ''));
-            } else {
-              eventNotes.push(`<strong class="ledger-event">Member ${m} exited</strong>` +
-                `<span class="ledger-sub">sale pending mo. ${e.dropoutEvent.saleMonth}</span>`);
-            }
-          }
-          if (e.saleEvent) {
-            const proceeds = e.saleEvent.proceeds;
-            const sign     = proceeds >= 0 ? "+" : "\u2212";
-            eventNotes.push(`<strong class="ledger-event">Sale proceeds ${sign}${formatDollars(Math.abs(proceeds))} to fund</strong>` +
-              `<span class="ledger-sub">${formatDollars(e.saleEvent.salePrice)} price &minus; ${formatDollars(e.saleEvent.remainingBalance)} balance</span>`);
-          }
-
-          if (e.phase === 'saving') {
-            const progress       = `${formatDollars(e.fundBalance)} / ${formatDollars(downPaymentTarget)}`;
-            const effectiveIncome = e.totalIncome - e.housingCosts;
-            const housingLine    = e.housingCosts > 0
-              ? `<span class="ledger-sub">${incomeFormula(e)}</span><span class="ledger-sub">&minus;${formatDollars(e.housingCosts)} tax/ins/maint</span>`
-              : `<span class="ledger-sub">${incomeFormula(e)}</span>`;
-            if (e.housePurchased) {
-              eventNotes.unshift(`<strong class="ledger-event">Purchased — ${formatDollars(downPaymentTarget)} withdrawn</strong>`);
-            }
-            const isHighlighted = e.housePurchased || e.saleEvent;
-            return `<tr${isHighlighted ? ' class="ledger-purchase-row"' : ''}>
-              <td class="ledger-month">${e.month}</td>
-              <td class="ledger-phase">saving</td>
-              <td class="ledger-num">${formatDollars(effectiveIncome)}${housingLine}</td>
-              <td class="ledger-balance">${progress}</td>
-              <td class="ledger-na">—</td>
-              <td>${eventNotes.join('')}</td>
-            </tr>`;
-          } else {
-            const effectiveIncome = e.totalIncome - e.housingCosts;
-            const housingLine    = e.housingCosts > 0
-              ? `<span class="ledger-sub">${incomeFormula(e)}</span><span class="ledger-sub">&minus;${formatDollars(e.housingCosts)} tax/ins/maint</span>`
-              : `<span class="ledger-sub">${incomeFormula(e)}</span>`;
-            const mortgageDetail = `interest ${formatDollars(e.interestCharged)} + principal ${formatDollars(e.principalPaid)}` +
-              (e.overpayment > 0 ? ` + <span class="ledger-extra">${formatDollars(e.overpayment)} surplus</span>` : "");
-            const mortgageCell = `${formatDollars(e.mortgageBalanceBefore)} &rarr; ${formatDollars(e.mortgageBalanceAfter)}<span class="ledger-sub">${mortgageDetail}</span>`;
-            if (e.mortgageBalanceAfter === 0) {
-              eventNotes.unshift(`<strong class="ledger-event">Paid off</strong>` +
-                (e.overpayment > 0 ? ` <span class="ledger-extra">+${formatDollars(e.overpayment)} to next</span>` : ""));
-            }
-            const isHighlighted = e.mortgageBalanceAfter === 0 || e.saleEvent;
-            return `<tr${isHighlighted ? ' class="ledger-purchase-row"' : ''}>
-              <td class="ledger-month">${e.month}</td>
-              <td class="ledger-phase">payoff</td>
-              <td class="ledger-num">${formatDollars(effectiveIncome)}${housingLine}</td>
-              <td class="ledger-na">—</td>
-              <td class="ledger-balance">${mortgageCell}</td>
-              <td>${eventNotes.join('')}</td>
-            </tr>`;
-          }
-        }).join("");
-
-        return `<div class="ledger-section">
-          <h3 class="ledger-heading">House ${houseIdx} cycle</h3>
-          <div class="ledger-scroll">
-            <table class="ledger-table">
-              <colgroup>
-                <col style="width:6%">
-                <col style="width:10%">
-                <col style="width:20%">
-                <col style="width:22%">
-                <col style="width:28%">
-                <col style="width:14%">
-              </colgroup>
-              <thead><tr>
-                <th>Month</th><th>Phase</th><th>Income</th><th>Fund balance</th><th>Mortgage balance</th><th>Notes</th>
-              </tr></thead>
-              <tbody>${rows}</tbody>
-            </table>
-          </div>
-        </div>`;
-      }).join("");
-
-      const targetLabel = hasClosingCosts
-        ? `Purchase target (down payment + closing costs)`
-        : `Down payment target`;
-
-      return `
-        <p class="ledger-formula-key">
-          ${targetLabel}: ${formatDollars(downPaymentTarget)}.
-          Saving phase: fund grows until target reached, then house is purchased.
-          Payoff phase: all income goes directly to the mortgage (interest = balance &times; rate/12, remainder reduces principal).
-        </p>
-        ${sections}
-      `;
     }
 
     // ── Traditional ledger rendering ──────────────────────────────────────────
