@@ -211,7 +211,7 @@
               </div>
               <div class="calc-field">
                 <label class="calc-label" for="dropout-sale-price">Sale price if already housed ($)</label>
-                <input class="calc-input" type="number" id="dropout-sale-price" min="0" step="1000">
+                <input class="calc-input" type="number" id="dropout-sale-price" min="0" step="1000" data-auto="1">
               </div>
             </fieldset>
 
@@ -1142,15 +1142,25 @@
     }
 
     // Sets the sale price input default to the selected member's home price.
+    // Only overwrites the field when data-auto="1" — i.e. the user hasn't manually edited it.
     function syncDropoutSalePrice() {
       if (!_lastDropoutInputs) return;
+      var el = document.getElementById("dropout-sale-price");
+      if (el.dataset.auto !== "1") return;
       var memberIdx   = parseInt(document.getElementById("dropout-member").value);
       var memberPrice = (_lastDropoutInputs.homePrices && _lastDropoutInputs.homePrices[memberIdx])
         || _lastDropoutInputs.homePrice;
-      document.getElementById("dropout-sale-price").value = memberPrice;
+      el.value = memberPrice;
     }
 
+    // When the user edits the sale price directly, lock it (clear auto flag).
+    document.getElementById("dropout-sale-price").addEventListener("input", function () {
+      this.dataset.auto = "";
+    });
+
     document.getElementById("dropout-member").addEventListener("change", function () {
+      // Member changed — reset to auto so the new member's price populates.
+      document.getElementById("dropout-sale-price").dataset.auto = "1";
       syncDropoutSalePrice();
       runCalculation();
     });
