@@ -1058,6 +1058,11 @@ a.nav__wordmark:hover {
   font-style: italic;
 }
 
+.ledger-negative {
+  color: #c0392b;
+  font-weight: 700;
+}
+
 .ledger-housed {
   color: #555;
   font-size: 0.72rem;

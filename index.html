@@ -433,11 +433,15 @@
           : `<span class="ledger-sub">${incomeFormula(e)}</span>`;
         const incomeCell    = `${formatDollars(effectiveInc)}${housingLine}`;
 
+        const fmtFund = n => n < 0
+          ? `<span class="ledger-negative">\u2212${formatDollars(n)}</span>`
+          : formatDollars(n);
+
         let phaseLabel, fundCell, mortgageCell, isHighlighted = false;
 
         if (e.phase === 'saving') {
           phaseLabel  = `Saving H${e.houseIndex + 1}`;
-          fundCell    = `${formatDollars(e.fundBalance)} / ${formatDollars(e.downPaymentTarget)}`;
+          fundCell    = `${fmtFund(e.fundBalance)} / ${formatDollars(e.downPaymentTarget)}`;
           mortgageCell = '&mdash;';
           if (e.housePurchased) {
             notes.unshift(`<strong class="ledger-event">Purchased &mdash; ${formatDollars(e.downPaymentTarget)} withdrawn</strong>`);
@@ -460,10 +464,10 @@
 
         } else if (e.phase === 1) {
           phaseLabel      = 'Buying';
-          let fundStr     = `${e.netGrowth >= 0 ? "+" : "\u2212"}${formatDollars(Math.abs(e.netGrowth))} &rarr; ${formatDollars(e.fundBalanceAfterGrowth)}`;
+          let fundStr     = `${e.netGrowth >= 0 ? "+" : "\u2212"}${formatDollars(Math.abs(e.netGrowth))} &rarr; ${fmtFund(e.fundBalanceAfterGrowth)}`;
           if (e.housePurchased) {
             const wLabel  = e.housePurchased.closingCosts > 0 ? 'down + closing' : 'down payment';
-            fundStr      += `<span class="ledger-sub">&minus;${formatDollars(e.housePurchased.downPaymentWithdrawn)} ${wLabel} &rarr; ${formatDollars(e.fundBalanceEnd)}</span>`;
+            fundStr      += `<span class="ledger-sub">&minus;${formatDollars(e.housePurchased.downPaymentWithdrawn)} ${wLabel} &rarr; ${fmtFund(e.fundBalanceEnd)}</span>`;
             notes.unshift(`<strong class="ledger-event">House ${e.housePurchased.position}</strong>`);
             isHighlighted = true;
           }
