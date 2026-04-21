@@ -985,6 +985,11 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
     // dropout member is at sequential position k and just dropped out pre-move-in.
     let skipThisK = false;
 
+    // Housing costs for positions 0..k-1 that were actually housed (a prior position
+    // may have been skipped due to pre-move-in dropout, so we can't rely on the
+    // pre-computed cumulative which assumes every prior slot was filled).
+    const savingPhaseCosts = housingCostsList.slice(0, k).reduce((a, hc, i) => housedAtMonth[i] !== null ? a + hc : a, 0);
+
     while (savingFund < purchaseTargets[k]) {
       if (month >= MAX_MONTHS) {
         return { error: "Simulation exceeded 1200 months. Try different inputs.", positions: null, totalMonths: null, traditional: null, ledger: null };
@@ -1001,7 +1006,7 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
       }
 
       const fundInterestEarned = savingFund * fundR;
-      savingFund += c2Income + c1Income + monthlyDonorContrib + fundInterestEarned - housingCostsCumulative[k];
+      savingFund += c2Income + c1Income + monthlyDonorContrib + fundInterestEarned - savingPhaseCosts;
       month++;
 
       ledger.push({
@@ -1015,7 +1020,7 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
         donorIncome:    monthlyDonorContrib,
         fundInterestEarned,
         totalIncome:    c2Income + c1Income + monthlyDonorContrib + fundInterestEarned,
-        housingCosts:   housingCostsCumulative[k],
+        housingCosts:   savingPhaseCosts,
         fundBalance:    savingFund,
         downPaymentTarget: purchaseTargets[k],
         closingCosts:   closingCostsList[k],
@@ -1102,6 +1107,10 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
     let mortgageBalance = Math.max(0, loanPrincipals[k] - savingFund);
     if (savingFund > loanPrincipals[k]) carryover = savingFund - loanPrincipals[k];
 
+    // Housing costs for positions 0..k that were actually housed (position k was just
+    // housed above; earlier positions may have been skipped due to pre-move-in dropout).
+    const payoffPhaseCosts = housingCostsList.slice(0, k + 1).reduce((a, hc, i) => housedAtMonth[i] !== null ? a + hc : a, 0);
+
     while (mortgageBalance > 0) {
       if (month >= MAX_MONTHS) {
         return { error: "Simulation exceeded 1200 months. Try different inputs.", positions: null, totalMonths: null, traditional: null, ledger: null };
@@ -1119,7 +1128,7 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
       }
 
       const grossIncome    = c2Income + c1Income + monthlyDonorContrib;
-      const payoffIncome   = grossIncome - housingCostsCumulative[k + 1];
+      const payoffIncome   = grossIncome - payoffPhaseCosts;
 
       const balanceBefore  = mortgageBalance;
       const interestCharged = balanceBefore * r;
@@ -1142,7 +1151,7 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
         c1Income,
         donorIncome:    monthlyDonorContrib,
         totalIncome:    grossIncome,
-        housingCosts:   housingCostsCumulative[k + 1],
+        housingCosts:   payoffPhaseCosts,
         fundBalance: null, downPaymentTarget: null, housePurchased: null,
         mortgageBalanceBefore: balanceBefore,
         interestCharged,
