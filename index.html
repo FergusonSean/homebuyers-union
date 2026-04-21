@@ -393,7 +393,6 @@
       if (housed  > 0 && e.c2Income > 0) parts.push(`${housed}x${formatDollars(e.c2Income / housed)} C2`);
       if (waiting > 0 && e.c1Income > 0) parts.push(`${waiting}x${formatDollars(e.c1Income / waiting)} C1`);
       if (e.donorIncome        > 0) parts.push(`${formatDollars(e.donorIncome)} donor`);
-      if (e.fundInterestEarned > 0) parts.push(`${formatDollars(e.fundInterestEarned)} interest`);
       return parts.join(" + ");
     }
 
@@ -428,9 +427,11 @@
         const waiting       = e.preHouseMembers  ?? e.waitingMembers ?? 0;
         const membersCell   = `${housed} in / ${waiting} waiting`;
         const effectiveInc   = e.totalIncome - e.housingCosts;
-        const interestLine   = e.fundInterestEarned < 0
-          ? `<span class="ledger-sub ledger-negative">&minus;${formatDollars(Math.abs(e.fundInterestEarned))} interest</span>`
-          : '';
+        const interestLine   = e.fundInterestEarned > 0
+          ? `<span class="ledger-sub">+${formatDollars(e.fundInterestEarned)} interest</span>`
+          : e.fundInterestEarned < 0
+            ? `<span class="ledger-sub ledger-negative">&minus;${formatDollars(Math.abs(e.fundInterestEarned))} interest</span>`
+            : '';
         const housingCostLine = e.housingCosts > 0
           ? `<span class="ledger-sub">&minus;${formatDollars(e.housingCosts)} tax/ins/maint</span>`
           : '';
