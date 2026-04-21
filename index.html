@@ -417,16 +417,33 @@
           ? `<span class="ledger-sub">&minus;${formatDollars(e.housingCosts)} tax/ins/maint</span>` : "";
 
         let balanceCell = `${e.netGrowth >= 0 ? "+" : "-"}${formatDollars(Math.abs(e.netGrowth))} &rarr; ${formatDollars(e.fundBalanceAfterGrowth)}`;
-        let eventCell   = "";
+        const eventParts = [];
         if (e.housePurchased) {
           const withdrawLabel = e.housePurchased.closingCosts > 0
             ? `down + closing`
             : `down payment`;
           balanceCell += `<span class="ledger-sub">-${formatDollars(e.housePurchased.downPaymentWithdrawn)} ${withdrawLabel} &rarr; ${formatDollars(e.fundBalanceEnd)}</span>`;
-          eventCell    = `<strong class="ledger-event">House ${e.housePurchased.position}</strong>`;
+          eventParts.push(`<strong class="ledger-event">House ${e.housePurchased.position}</strong>`);
         }
+        if (e.dropoutEvent) {
+          const m = e.dropoutEvent.memberIndex + 1;
+          if (e.dropoutEvent.type === 'pre-move-in') {
+            eventParts.push(`<strong class="ledger-event">Member ${m} exited</strong>` +
+              (e.dropoutEvent.c1Refund > 0 ? `<span class="ledger-sub">${formatDollars(e.dropoutEvent.c1Refund)} refunded from fund</span>` : ''));
+          } else {
+            eventParts.push(`<strong class="ledger-event">Member ${m} exited</strong>` +
+              `<span class="ledger-sub">sale pending mo. ${e.dropoutEvent.saleMonth}</span>`);
+          }
+        }
+        if (e.saleEvent) {
+          const proceeds = e.saleEvent.proceeds;
+          const sign     = proceeds >= 0 ? "+" : "\u2212";
+          eventParts.push(`<strong class="ledger-event">Sale proceeds ${sign}${formatDollars(Math.abs(proceeds))} to fund</strong>` +
+            `<span class="ledger-sub">${formatDollars(e.saleEvent.salePrice)} price &minus; ${formatDollars(e.saleEvent.remainingBalance)} balance</span>`);
+        }
+        const eventCell = eventParts.join('');
 
-        return `<tr${e.housePurchased ? ' class="ledger-purchase-row"' : ''}>
+        return `<tr${(e.housePurchased || e.saleEvent) ? ' class="ledger-purchase-row"' : ''}>
           <td class="ledger-month">${e.month}</td>
           <td class="ledger-housed">${e.postHouseMembers} in / ${e.preHouseMembers} waiting</td>
           <td class="ledger-num">${formatDollars(e.totalIncome - e.housingCosts)}<span class="ledger-sub">${incomeFormula(e)}</span>${housingLine}</td>
@@ -808,22 +825,41 @@
 
       const sections = Object.keys(cycles).map(houseIdx => {
         const rows = cycles[houseIdx].map(e => {
+          const eventNotes = [];
+          if (e.dropoutEvent) {
+            const m = e.dropoutEvent.memberIndex + 1;
+            if (e.dropoutEvent.type === 'pre-move-in') {
+              eventNotes.push(`<strong class="ledger-event">Member ${m} exited</strong>` +
+                (e.dropoutEvent.c1Refund > 0 ? `<span class="ledger-sub">${formatDollars(e.dropoutEvent.c1Refund)} refunded from fund</span>` : ''));
+            } else {
+              eventNotes.push(`<strong class="ledger-event">Member ${m} exited</strong>` +
+                `<span class="ledger-sub">sale pending mo. ${e.dropoutEvent.saleMonth}</span>`);
+            }
+          }
+          if (e.saleEvent) {
+            const proceeds = e.saleEvent.proceeds;
+            const sign     = proceeds >= 0 ? "+" : "\u2212";
+            eventNotes.push(`<strong class="ledger-event">Sale proceeds ${sign}${formatDollars(Math.abs(proceeds))} to fund</strong>` +
+              `<span class="ledger-sub">${formatDollars(e.saleEvent.salePrice)} price &minus; ${formatDollars(e.saleEvent.remainingBalance)} balance</span>`);
+          }
+
           if (e.phase === 'saving') {
             const progress       = `${formatDollars(e.fundBalance)} / ${formatDollars(downPaymentTarget)}`;
             const effectiveIncome = e.totalIncome - e.housingCosts;
             const housingLine    = e.housingCosts > 0
               ? `<span class="ledger-sub">${incomeFormula(e)}</span><span class="ledger-sub">&minus;${formatDollars(e.housingCosts)} tax/ins/maint</span>`
               : `<span class="ledger-sub">${incomeFormula(e)}</span>`;
-            const event = e.housePurchased
-              ? `<strong class="ledger-event">Purchased — ${formatDollars(downPaymentTarget)} withdrawn</strong>`
-              : "";
-            return `<tr${e.housePurchased ? ' class="ledger-purchase-row"' : ''}>
+            if (e.housePurchased) {
+              eventNotes.unshift(`<strong class="ledger-event">Purchased — ${formatDollars(downPaymentTarget)} withdrawn</strong>`);
+            }
+            const isHighlighted = e.housePurchased || e.saleEvent;
+            return `<tr${isHighlighted ? ' class="ledger-purchase-row"' : ''}>
               <td class="ledger-month">${e.month}</td>
               <td class="ledger-phase">saving</td>
               <td class="ledger-num">${formatDollars(effectiveIncome)}${housingLine}</td>
               <td class="ledger-balance">${progress}</td>
               <td class="ledger-na">—</td>
-              <td>${event}</td>
+              <td>${eventNotes.join('')}</td>
             </tr>`;
           } else {
             const effectiveIncome = e.totalIncome - e.housingCosts;
@@ -833,17 +869,18 @@
             const mortgageDetail = `interest ${formatDollars(e.interestCharged)} + principal ${formatDollars(e.principalPaid)}` +
               (e.overpayment > 0 ? ` + <span class="ledger-extra">${formatDollars(e.overpayment)} surplus</span>` : "");
             const mortgageCell = `${formatDollars(e.mortgageBalanceBefore)} &rarr; ${formatDollars(e.mortgageBalanceAfter)}<span class="ledger-sub">${mortgageDetail}</span>`;
-            const notes = e.mortgageBalanceAfter === 0
-              ? `<strong class="ledger-event">Paid off</strong>` +
-                (e.overpayment > 0 ? ` <span class="ledger-extra">+${formatDollars(e.overpayment)} to next</span>` : "")
-              : "";
-            return `<tr${e.mortgageBalanceAfter === 0 ? ' class="ledger-purchase-row"' : ''}>
+            if (e.mortgageBalanceAfter === 0) {
+              eventNotes.unshift(`<strong class="ledger-event">Paid off</strong>` +
+                (e.overpayment > 0 ? ` <span class="ledger-extra">+${formatDollars(e.overpayment)} to next</span>` : ""));
+            }
+            const isHighlighted = e.mortgageBalanceAfter === 0 || e.saleEvent;
+            return `<tr${isHighlighted ? ' class="ledger-purchase-row"' : ''}>
               <td class="ledger-month">${e.month}</td>
               <td class="ledger-phase">payoff</td>
               <td class="ledger-num">${formatDollars(effectiveIncome)}${housingLine}</td>
               <td class="ledger-na">—</td>
               <td class="ledger-balance">${mortgageCell}</td>
-              <td>${notes}</td>
+              <td>${eventNotes.join('')}</td>
             </tr>`;
           }
         }).join("");
