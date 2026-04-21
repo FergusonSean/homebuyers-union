@@ -1211,7 +1211,7 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
           remainingBal    = mortgageBalance;
           proceeds        = salePrice - remainingBal;
           mortgageBalance = 0;                        // terminates the payoff while loop
-          if (proceeds > 0) carryover += proceeds;    // carry any surplus forward
+          carryover      += proceeds;                 // negative proceeds reduce the fund
         } else {
           // Sale of an earlier-cycle house — add net proceeds to carryover.
           const monthsPaid = month - housedAtMonth[dropoutIdx];
