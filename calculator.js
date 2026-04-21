@@ -985,10 +985,11 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
     // dropout member is at sequential position k and just dropped out pre-move-in.
     let skipThisK = false;
 
-    // Housing costs for positions 0..k-1 that were actually housed (a prior position
-    // may have been skipped due to pre-move-in dropout, so we can't rely on the
-    // pre-computed cumulative which assumes every prior slot was filled).
-    const savingPhaseCosts = housingCostsList.slice(0, k).reduce((a, hc, i) => housedAtMonth[i] !== null ? a + hc : a, 0);
+    // Housing costs for positions 0..k-1 that were actually housed and whose house
+    // has not since been sold (a prior position may have been skipped due to pre-move-in
+    // dropout, or sold due to post-move-in dropout).
+    const savingPhaseCosts = housingCostsList.slice(0, k).reduce((a, hc, i) =>
+      (housedAtMonth[i] !== null && !(i === dropoutIdx && dropoutMemberExcluded)) ? a + hc : a, 0);
 
     while (savingFund < purchaseTargets[k]) {
       if (month >= MAX_MONTHS) {
@@ -1079,8 +1080,9 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
         const monthsPaid   = month - housedAtMonth[dropoutIdx];
         const remainingBal = Math.max(0, remainingBalance(loanPrincipals[dropoutIdx], annualRatePct, termYears, monthsPaid));
         const proceeds     = salePrice - remainingBal;
-        savingFund        += proceeds;
+        savingFund                += proceeds;
         dropoutMortgagePendingSale = false;
+        dropoutMemberExcluded      = true;   // stop charging housing costs for sold house
 
         ledger[ledger.length - 1].saleEvent = {
           memberIndex:      dropoutIdx,
@@ -1107,9 +1109,10 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
     let mortgageBalance = Math.max(0, loanPrincipals[k] - savingFund);
     if (savingFund > loanPrincipals[k]) carryover = savingFund - loanPrincipals[k];
 
-    // Housing costs for positions 0..k that were actually housed (position k was just
-    // housed above; earlier positions may have been skipped due to pre-move-in dropout).
-    const payoffPhaseCosts = housingCostsList.slice(0, k + 1).reduce((a, hc, i) => housedAtMonth[i] !== null ? a + hc : a, 0);
+    // Housing costs for positions 0..k that were actually housed and whose house has
+    // not since been sold (earlier positions may have been skipped or sold due to dropout).
+    const payoffPhaseCosts = housingCostsList.slice(0, k + 1).reduce((a, hc, i) =>
+      (housedAtMonth[i] !== null && !(i === dropoutIdx && dropoutMemberExcluded)) ? a + hc : a, 0);
 
     while (mortgageBalance > 0) {
       if (month >= MAX_MONTHS) {
@@ -1198,12 +1201,25 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
 
       // Consume sale proceeds if the sale month arrives during the payoff sub-phase.
       if (dropoutMortgagePendingSale && month === dropoutSaleMonth && phaseAHouseIndexOfDropout !== null) {
-        const monthsPaid   = month - housedAtMonth[dropoutIdx];
-        const remainingBal = Math.max(0, remainingBalance(loanPrincipals[dropoutIdx], annualRatePct, termYears, monthsPaid));
-        const proceeds     = salePrice - remainingBal;
-        // Apply proceeds as a carryover into the next phase (or reduce current mortgage).
-        carryover         += proceeds;
         dropoutMortgagePendingSale = false;
+
+        let proceeds, remainingBal;
+        if (k === dropoutIdx) {
+          // The current payoff IS for the dropout member's house. The sale closes out
+          // this mortgage immediately — use the actual tracked balance (which may differ
+          // from the amortization schedule if income was insufficient to cover interest).
+          remainingBal    = mortgageBalance;
+          proceeds        = salePrice - remainingBal;
+          mortgageBalance = 0;                        // terminates the payoff while loop
+          if (proceeds > 0) carryover += proceeds;    // carry any surplus forward
+        } else {
+          // Sale of an earlier-cycle house — add net proceeds to carryover.
+          const monthsPaid = month - housedAtMonth[dropoutIdx];
+          remainingBal  = Math.max(0, remainingBalance(loanPrincipals[dropoutIdx], annualRatePct, termYears, monthsPaid));
+          proceeds      = salePrice - remainingBal;
+          carryover    += proceeds;
+        }
+        dropoutMemberExcluded = true;   // stop charging housing costs for sold house in subsequent cycles
 
         ledger[ledger.length - 1].saleEvent = {
           memberIndex:      dropoutIdx,
@@ -1339,6 +1355,8 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
       fundBalance       += proceeds;
       dropoutMortgagePendingSale = false;
       if (mortgageStartMonth[dropoutIdx] !== null) mortgageCount--;
+      mortgageStartMonth[dropoutIdx] = null;   // stop charging obligations for sold house
+      dropoutMemberExcluded          = true;   // stop charging housing costs for sold house
 
       saleEventThisMonth = {
         memberIndex:      dropoutIdx,
