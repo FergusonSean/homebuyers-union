@@ -619,7 +619,7 @@
                           : drPos.monthsUntilHoused > bsMonths ? "cmp-worse"
                           : drPos.totalPaid < bsPaid ? "cmp-better"
                           : drPos.totalPaid > bsPaid ? "cmp-worse" : "";
-              return `<td><span class="${mCls}">${formatMonths(drPos.monthsUntilHoused)}</span><span class="ledger-sub ${pCls}">${formatDollars(drPos.totalPaid)}</span><span class="ledger-sub ${rCls}">${formatDollars(drRate)}/mo housed (first ${windowLabel})</span><span class="ledger-sub ${bsCls}">baseline: ${formatMonths(bsMonths)} / ${formatDollars(bsPaid)}</span></td>`;
+              return `<td><span class="${mCls}">${formatMonths(drPos.monthsUntilHoused)}</span><span class="ledger-sub ${pCls}">${formatDollars(drPos.totalPaid)}</span><span class="ledger-sub rate-metric ${rCls}">${formatDollars(drRate)}/mo housed</span><span class="ledger-sub ${bsCls}">baseline: ${formatMonths(bsMonths)} / ${formatDollars(bsPaid)}</span></td>`;
             }
 
             // Default: no dropout active, or dropout unavailable, or traditional column.
@@ -629,7 +629,7 @@
             const pCls = isTrad ? "" : pos.totalPaid < tradPos.totalPaid ? "cmp-better"
                                      : pos.totalPaid > tradPos.totalPaid ? "cmp-worse" : "";
             const rCls = isTrad ? "" : rate < tradRate ? "cmp-better" : rate > tradRate ? "cmp-worse" : "";
-            return `<td><span class="${mCls}">${formatMonths(pos.monthsUntilHoused)}</span><span class="ledger-sub ${pCls}">${formatDollars(pos.totalPaid)}</span><span class="ledger-sub ${rCls}">${formatDollars(rate)}/mo housed (first ${windowLabel})</span></td>`;
+            return `<td><span class="${mCls}">${formatMonths(pos.monthsUntilHoused)}</span><span class="ledger-sub ${pCls}">${formatDollars(pos.totalPaid)}</span><span class="ledger-sub rate-metric ${rCls}">${formatDollars(rate)}/mo housed</span></td>`;
           }).join("");
           return `<tr><td class="tbl-pos">Position ${i + 1}</td>${cells}</tr>`;
         }).join("");
@@ -671,7 +671,7 @@
           const mCls = isTrad ? "" : v < tradTotal ? "cmp-better" : v > tradTotal ? "cmp-worse" : "";
           const pCls = isTrad ? "" : groupPaid < tradTotalPaid ? "cmp-better" : groupPaid > tradTotalPaid ? "cmp-worse" : "";
           const rCls = isTrad ? "" : rate < tradGroupRate ? "cmp-better" : rate > tradGroupRate ? "cmp-worse" : "";
-          return `<td><span class="${mCls}">${formatMonths(v)}</span><span class="ledger-sub ${pCls}">${formatDollars(groupPaid)}</span><span class="ledger-sub ${rCls}">${formatDollars(rate)}/mo housed (first ${windowLabel})</span></td>`;
+          return `<td><span class="${mCls}">${formatMonths(v)}</span><span class="ledger-sub ${pCls}">${formatDollars(groupPaid)}</span><span class="ledger-sub rate-metric ${rCls}">${formatDollars(rate)}/mo housed</span></td>`;
         }).join("")
       }</tr>`;
 
@@ -680,13 +680,14 @@
         : "";
 
       el.innerHTML = `
+        <p class="calc-caption">Each row is one member's outcome. Even the last member is housed sooner — and pays less per month housed — than going it alone. <span class="cmp-better-key">Green</span> means better than a traditional mortgage.</p>
         <p class="calc-note" style="margin-bottom:0.5rem">
           <span class="cmp-better-key">Green</span> = better than traditional.
           <span class="cmp-worse-key">Red</span> = worse than traditional.
           "Seq. K" means the first K mortgages are paid off completely before switching to parallel for the rest.
           "Traditional (same payments)" is the traditional path but paying your post-move-in amount each month instead of the standard payment.${dropoutNote}
         </p>
-        <p class="calc-note" style="font-size:0.75rem;margin-bottom:1rem">Each cell: months until housed / total paid / cost per month housed (first ${windowLabel})${dropoutResults ? " (dropout scenario; sub-line = baseline)" : ""}</p>
+        <p class="calc-note" style="font-size:0.75rem;margin-bottom:1rem">Each cell: <strong>time until housed</strong> / total paid / cost per month housed. That last figure is a member's full housing cost averaged over a ${windowLabel} window — a price comparison, not a wait time.${dropoutResults ? " (Dropout scenario; sub-line = baseline.)" : ""}</p>
 
         <div class="tbl-wrapper">
           <table class="results-table">
