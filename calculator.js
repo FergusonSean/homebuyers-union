@@ -1522,6 +1522,29 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
     return { path, accel };
   });
 
+  // Departing member's own recovery — what they walk away with. Derived from the
+  // same ledger events already recorded, so this is a pure addition to the result.
+  //   pre-move-in : refunded principal (c1Refund).
+  //   post-move-in: equity returned = sale proceeds (salePrice − payoff), floored at 0.
+  let dropoutRecovery = null;
+  if (dropoutApplied) {
+    let recoveryType = dropoutType;
+    let recoveryAmount = 0;
+    for (const entry of ledger) {
+      if (entry.dropoutEvent && entry.dropoutEvent.type === 'pre-move-in') {
+        recoveryAmount = Math.max(0, entry.dropoutEvent.c1Refund);
+      }
+      if (entry.saleEvent) {
+        recoveryAmount = Math.max(0, entry.saleEvent.proceeds);
+      }
+    }
+    dropoutRecovery = {
+      memberIndex: dropoutIdx,
+      type:        recoveryType,
+      amount:      Math.round(recoveryAmount),
+    };
+  }
+
   const positions = housedAtMonth.map((housedMonth, k) => {
     const paid            = Math.round(totalPaid[k]);
     const isDropoutMember = k === dropoutIdx && dropoutApplied;
@@ -1550,6 +1573,7 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
     ledger,
     sequentialCount,
     dropout,
+    dropoutRecovery,
     error: null,
   };
 }

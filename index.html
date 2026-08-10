@@ -200,22 +200,33 @@
               <div id="member-prices-list"></div>
             </fieldset>
 
-            <fieldset class="calc-fieldset">
-              <legend class="calc-legend">Dropout scenario</legend>
+          </div>
+
+          <!-- Exit / departure scenario — a normal question, not a hidden failure case -->
+          <div class="dropout-section" id="dropout-section">
+            <h3 class="dropout-heading">What if someone leaves — or you need to?</h3>
+            <p class="dropout-desc">Life changes. Pick who exits and when, and see exactly what they walk away with and how it ripples through the group. Then change the numbers and try to break it.</p>
+
+            <div class="dropout-presets" role="group" aria-label="Exit scenario presets">
+              <button type="button" class="dropout-preset" id="dropout-preset-typical">Typical exit</button>
+              <button type="button" class="dropout-preset dropout-preset--worst" id="dropout-preset-worst">Deliberate worst case</button>
+              <span class="dropout-preset-hint">worst case = housed, underwater, sold far below the mortgage balance</span>
+            </div>
+
+            <div class="dropout-fields">
               <div class="calc-field">
-                <label class="calc-label" for="dropout-member">Member who drops out</label>
+                <label class="calc-label" for="dropout-member">Member who leaves</label>
                 <select class="calc-input" id="dropout-member"></select>
               </div>
               <div class="calc-field">
-                <label class="calc-label" for="dropout-month">Dropout month</label>
+                <label class="calc-label" for="dropout-month">Month they leave</label>
                 <input class="calc-input" type="number" id="dropout-month" min="1" step="1" value="12">
               </div>
               <div class="calc-field">
                 <label class="calc-label" for="dropout-sale-price">Sale price if already housed ($)</label>
                 <input class="calc-input" type="number" id="dropout-sale-price" min="0" step="1000" data-auto="1">
               </div>
-            </fieldset>
-
+            </div>
           </div>
 
         </form>
@@ -610,9 +621,14 @@
             const dr     = (!isTrad && dropoutResults) ? dropoutResults[m.k] : null;
             const drPos  = dr && !dr.error ? dr.positions[i] : null;
 
-            // Dropout member's cell: show exit info as headline.
+            // Dropout member's cell: show their own outcome — what they walk away with.
             if (drPos && i === dropoutMemberIdx) {
-              return `<td><span>Exited mo.&nbsp;${dr.dropout.month}</span><span class="ledger-sub">${formatDollars(drPos.totalPaid)} paid</span></td>`;
+              const rec       = dr.dropoutRecovery;
+              const recLabel  = rec && rec.type === "post-move-in" ? "equity" : "refund";
+              const recLine   = rec
+                ? `<span class="ledger-sub cmp-better">gets back ~${formatDollars(rec.amount)} (${recLabel})</span>`
+                : "";
+              return `<td><span>Exited mo.&nbsp;${dr.dropout.month}</span><span class="ledger-sub">${formatDollars(drPos.totalPaid)} paid</span>${recLine}</td>`;
             }
 
             // Non-dropout member with active dropout: dropout numbers are headline, baseline is sub-line.
@@ -1034,6 +1050,37 @@
       document.getElementById("dropout-sale-price").dataset.auto = "1";
       syncDropoutSalePrice();
       runCalculation();
+    });
+
+    // ── Exit-scenario presets ────────────────────────────────────────────
+    // Returns the selected member's home price, falling back to the global price.
+    function memberHomePrice(memberIdx) {
+      if (!_lastDropoutInputs) return parseFloat(document.getElementById("homePrice").value) || 0;
+      return (_lastDropoutInputs.homePrices && _lastDropoutInputs.homePrices[memberIdx])
+        || _lastDropoutInputs.homePrice;
+    }
+
+    // Populates the exit inputs from a preset spec, then recalculates.
+    function applyDropoutPreset(memberIdx, month, salePrice) {
+      document.getElementById("dropout-member").value = String(memberIdx);
+      document.getElementById("dropout-month").value  = String(month);
+      var salePriceEl = document.getElementById("dropout-sale-price");
+      salePriceEl.value        = String(Math.round(salePrice));
+      salePriceEl.dataset.auto = ""; // preset sets an explicit price; don't auto-overwrite it
+      runCalculation();
+    }
+
+    // Typical, good-faith exit: an early-housed member leaves well after moving in,
+    // having built equity, and sells at a fair price (their own home's value).
+    document.getElementById("dropout-preset-typical").addEventListener("click", function () {
+      applyDropoutPreset(0, 90, memberHomePrice(0));
+    });
+
+    // Deliberately stacked worst case: housed + underwater + torched + no insurance —
+    // an early-housed member exits soon after moving in (while the mortgage balance is
+    // still near-full) and the house sells for far below that balance (30% of price).
+    document.getElementById("dropout-preset-worst").addEventListener("click", function () {
+      applyDropoutPreset(0, 60, memberHomePrice(0) * 0.3);
     });
 
     renderMemberPriceInputs();
