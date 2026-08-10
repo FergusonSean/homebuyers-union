@@ -337,14 +337,116 @@ if (postSaleEvent) {
   // The saleEvent month should be dropoutMonth + 2.
   assert("post-move-in dropout: saleEvent occurs at dropout month + 2",
     postSaleEvent.month === postDropoutMonth + 2);
-  // proceeds = salePrice - remainingBalance (may be negative or positive)
-  const expectedProceeds = testSalePrice - postSaleEvent.saleEvent.remainingBalance;
+  // Sale model: the departing member owes the fund back for the full financial
+  // responsibility it took on for their house — the fund's tracked cash outlay (A),
+  // plus the remaining mortgage balance it must pay off (B), plus the sale-side
+  // transaction costs (C) — less what the member paid in, plus a 1% fee. The buyer
+  // pays cash; the member walks away with max(0, salePrice − amountOwed).
+  //   responsibility = fundOutlay + remainingBalance + saleTxnCosts
+  //   amountOwed     = responsibility − memberPaid + 0.01*memberPaid
+  //   fundNet        = salePrice − memberWalkAway − saleTxnCosts − remainingBalance
+  // Conservation: remainingBalance + saleTxnCosts + fundNet + memberWalkAway === salePrice.
+  const se = postSaleEvent.saleEvent;
+  assert("post-move-in dropout: saleEvent exposes fundOutlay",     typeof se.fundOutlay === 'number');
+  assert("post-move-in dropout: saleEvent exposes saleTxnCosts",   typeof se.saleTxnCosts === 'number');
+  assert("post-move-in dropout: saleEvent exposes responsibility", typeof se.responsibility === 'number');
+  assert("post-move-in dropout: saleEvent exposes amountOwed",     typeof se.amountOwed === 'number');
+  assert("post-move-in dropout: saleEvent exposes memberWalkAway", typeof se.memberWalkAway === 'number');
+  assert("post-move-in dropout: saleEvent exposes fundNet",        typeof se.fundNet === 'number');
+  assertClose("post-move-in dropout: responsibility === fundOutlay + remainingBalance + saleTxnCosts",
+    se.responsibility, se.fundOutlay + se.remainingBalance + se.saleTxnCosts, 1e-6);
+  assertClose("post-move-in dropout: amountOwed === responsibility − memberPaid + 0.01*memberPaid",
+    se.amountOwed, se.responsibility - se.memberPaid + 0.01 * se.memberPaid, 1e-6);
+  assertClose("post-move-in dropout: memberWalkAway === max(0, salePrice − amountOwed)",
+    se.memberWalkAway, Math.max(0, se.salePrice - se.amountOwed), 1e-6);
+  assert("post-move-in dropout: memberWalkAway is floored at 0", se.memberWalkAway >= 0);
   assertClose(
-    "post-move-in dropout: saleEvent.proceeds = salePrice - remainingBalance",
-    postSaleEvent.saleEvent.proceeds,
-    expectedProceeds,
-    1
+    "post-move-in dropout: conservation (remainingBalance + saleTxnCosts + fundNet + memberWalkAway === salePrice)",
+    se.remainingBalance + se.saleTxnCosts + se.fundNet + se.memberWalkAway,
+    se.salePrice,
+    1e-6
   );
+  assertClose(
+    "post-move-in dropout: dropoutRecovery.amount equals rounded memberWalkAway",
+    postDropout.dropoutRecovery.amount,
+    Math.round(se.memberWalkAway),
+    1e-6
+  );
+}
+
+console.log("\ncalculateGroupWithDropout — post-move-in sale split: fair-price vs underwater:");
+
+// Helper: pull the first saleEvent out of a dropout result.
+function firstSaleEvent(result) {
+  const entry = result.ledger.find(e => e.saleEvent);
+  return entry ? entry.saleEvent : null;
+}
+
+// Fair-price case: a high sale price so the member walks away with a positive
+// amount after paying the fund back for its responsibility (less what they paid,
+// plus the fee).
+const fairPriceResult = calculateGroupWithDropout(postDropoutInputs, 0, {
+  memberIndex: 0,
+  month:       postDropoutMonth,
+  salePrice:   1000000,
+});
+const fairSale = firstSaleEvent(fairPriceResult);
+assert("fair-price sale: no error", fairPriceResult.error === null);
+assert("fair-price sale: saleEvent present", fairSale !== null);
+if (fairSale) {
+  assert("fair-price sale: member walks away with a positive amount", fairSale.memberWalkAway > 0);
+  assert("fair-price sale: amount owed below sale price", fairSale.amountOwed < fairSale.salePrice);
+  assertClose(
+    "fair-price sale: responsibility === fundOutlay + remainingBalance + saleTxnCosts",
+    fairSale.responsibility, fairSale.fundOutlay + fairSale.remainingBalance + fairSale.saleTxnCosts, 1e-6
+  );
+  assertClose(
+    "fair-price sale: amountOwed === responsibility − memberPaid + 0.01*memberPaid",
+    fairSale.amountOwed, fairSale.responsibility - fairSale.memberPaid + 0.01 * fairSale.memberPaid, 1e-6
+  );
+  assertClose(
+    "fair-price sale: conservation (remainingBalance + saleTxnCosts + fundNet + memberWalkAway === salePrice)",
+    fairSale.remainingBalance + fairSale.saleTxnCosts + fairSale.fundNet + fairSale.memberWalkAway,
+    fairSale.salePrice,
+    1e-6
+  );
+  assertClose(
+    "fair-price sale: recovery.amount === round(memberWalkAway)",
+    fairPriceResult.dropoutRecovery.amount,
+    Math.round(fairSale.memberWalkAway),
+    1e-6
+  );
+}
+
+// Underwater case: a sale price far below what the member owes the fund, so the
+// member walks away with 0 and the fund eats a loss (fundNet negative) after paying
+// off the mortgage and sale costs out of the small proceeds.
+const underwaterResult = calculateGroupWithDropout(postDropoutInputs, 0, {
+  memberIndex: 0,
+  month:       postDropoutMonth,
+  salePrice:   1000,
+});
+const underwaterSale = firstSaleEvent(underwaterResult);
+assert("underwater sale: no error", underwaterResult.error === null);
+assert("underwater sale: saleEvent present", underwaterSale !== null);
+if (underwaterSale) {
+  assert("underwater sale: amount owed exceeds sale price", underwaterSale.amountOwed > underwaterSale.salePrice);
+  assert("underwater sale: member walks away with exactly 0", underwaterSale.memberWalkAway === 0);
+  assert("underwater sale: fundNet is negative (a loss)", underwaterSale.fundNet < 0);
+  // With memberWalkAway 0: fundNet = salePrice − saleTxnCosts − remainingBalance.
+  assertClose(
+    "underwater sale: fundNet === salePrice − saleTxnCosts − remainingBalance",
+    underwaterSale.fundNet,
+    underwaterSale.salePrice - underwaterSale.saleTxnCosts - underwaterSale.remainingBalance,
+    1e-6
+  );
+  assertClose(
+    "underwater sale: conservation (remainingBalance + saleTxnCosts + fundNet + memberWalkAway === salePrice)",
+    underwaterSale.remainingBalance + underwaterSale.saleTxnCosts + underwaterSale.fundNet + underwaterSale.memberWalkAway,
+    underwaterSale.salePrice,
+    1e-6
+  );
+  assert("underwater sale: recovery.amount is 0", underwaterResult.dropoutRecovery.amount === 0);
 }
 
 console.log("\ncalculateGroupWithDropout — dropout month beyond simulation end:");

@@ -388,10 +388,12 @@
           }
         }
         if (e.saleEvent) {
-          const proceeds = e.saleEvent.proceeds;
-          const sign     = proceeds >= 0 ? "+" : "\u2212";
-          notes.push(`<strong class="ledger-event">Sale proceeds ${sign}${formatDollars(Math.abs(proceeds))} to fund</strong>` +
-            `<span class="ledger-sub">${formatDollars(e.saleEvent.salePrice)} price &minus; ${formatDollars(e.saleEvent.remainingBalance)} balance</span>`);
+          const se = e.saleEvent;
+          const fundLabel = se.fundNet >= 0
+            ? `Sale: +${formatDollars(se.fundNet)} to fund`
+            : `Sale: ${formatDollars(se.fundNet)} fund loss`;
+          notes.push(`<strong class="ledger-event">${fundLabel}</strong>` +
+            `<span class="ledger-sub">${formatDollars(se.salePrice)} price &minus; ${formatDollars(se.remainingBalance)} mortgage payoff &minus; ${formatDollars(se.saleTxnCosts)} sale costs &minus; ${formatDollars(se.memberWalkAway)} to member</span>`);
         }
         return notes;
       }
