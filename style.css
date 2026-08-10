@@ -557,6 +557,22 @@ a.nav__wordmark:hover {
   font-style: italic;
 }
 
+.calc-caption {
+  font-size: 1rem;
+  color: #1C1C1C;
+  line-height: 1.6;
+  max-width: 640px;
+  margin-bottom: 0.75rem;
+  font-weight: 500;
+}
+
+/* Cost-per-month-housed is a secondary, derived figure — kept visually quiet
+   so time-to-housed and the green/red comparison stay dominant. */
+.results-table .rate-metric {
+  font-style: italic;
+  opacity: 0.8;
+}
+
 /* ── Who it's for / two-col text ───────────────────────────────────────────── */
 
 .two-col p {
