@@ -201,8 +201,22 @@ a.nav__wordmark:hover {
   font-size: clamp(1rem, 2.5vw, 1.2rem);
   line-height: 1.6;
   color: #c8c4be;
-  margin-bottom: 2.25rem;
+  margin-bottom: 1.5rem;
   max-width: 560px;
+}
+
+.hero__stat {
+  font-size: clamp(0.95rem, 2vw, 1.05rem);
+  line-height: 1.5;
+  color: #FAF8F5;
+  margin-bottom: 2.25rem;
+  padding-left: 1rem;
+  border-left: 3px solid #8B1A1A;
+  max-width: 560px;
+}
+
+.hero__stat strong {
+  color: #FAF8F5;
 }
 
 /* ── Sections ──────────────────────────────────────────────────────────────── */
