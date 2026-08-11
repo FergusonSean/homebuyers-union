@@ -107,21 +107,17 @@ if (result.positions) {
     result.positions[0].totalPaid > result.positions[2].totalPaid
   );
 
-  // Later positions always pay less than the traditional path — they wait
-  // longer but contribute less overall. Position 1 may pay more depending
-  // on inputs because they subsidize others for the full lifecycle.
-  // In a group of 3 with these inputs, positions 2 and 3 save significantly.
-  assert(
-    "position 2 pays less than traditional path",
-    result.positions[1].totalPaid < result.traditional[1].totalPaid
-  );
+  // Later positions wait longer but are housed dramatically sooner than going
+  // it alone. Position 3 (last in the queue) still saves significantly.
+  //
+  // NOTE: Updated for the 2% union dues fee. Dues slow fund growth, so the
+  // lifecycle stretches and every member pays C2 gross for more months. With
+  // these particular inputs that pushes position 2's total *just past* the
+  // traditional path (it was a narrow win before dues), so we no longer assert
+  // position 2 beats traditional here — position 3 remains a clear, large win.
   assert(
     "position 3 pays less than traditional path",
     result.positions[2].totalPaid < result.traditional[2].totalPaid
-  );
-  assert(
-    "position 2 savedVsTraditional is positive",
-    result.positions[1].savedVsTraditional > 0
   );
   assert(
     "position 3 savedVsTraditional is positive",
@@ -562,9 +558,16 @@ if (b2LateDropout.error === null) {
 // group for years). The raw amountOwed goes negative, but it is FLOORED at 0 — the
 // member gets their full house value back and does not reclaim the subsidy, so they
 // never walk away with more than the sale price.
+//
+// NOTE: Dropout month updated 350 → 360 for the 2% union dues fee. Dues slow the
+// fund's growth, so the fund's responsibility for member 0's house is higher for
+// any given month and the point at which their contributions exceed it (raw owed
+// goes negative) shifts later. Month 360 is still well inside this run's 391-month
+// lifecycle and preserves the test's intent (over-contribution → walk-away capped
+// at sale price).
 const overpaidDropout = calculateGroupWithDropout(b2DropoutInputs, 0, {
   memberIndex: 0,
-  month:       350,
+  month:       360,
   salePrice:   300000,
 });
 if (overpaidDropout.error === null) {
@@ -803,6 +806,95 @@ const earlyUncapped = Math.max(
 assertClose(
   "exit cap: early amountOwed equals uncapped max(0, responsibility − paid + fee)",
   earlySale.amountOwed, earlyUncapped, 1e-6
+);
+
+// ─── Union dues (2% fee on member contributions) ──────────────────────────────
+
+console.log("\ncalculateGroup — union dues (2% fee):");
+
+const duesInputs = {
+  homePrice:           420000,
+  groupSize:           6,
+  c1:                  667,
+  c2:                  2500,
+  downPaymentPct:      0.20,
+  annualRatePct:       7,
+  termYears:           30,
+  monthlyDonorContrib: 500,
+  fundYieldPct:        3,
+};
+const duesResult = calculateGroup(duesInputs);
+
+assert("dues: no error", duesResult.error === null);
+
+// The result exposes a run-level totalUnionDues.
+assert("dues: totalUnionDues is present and positive", duesResult.totalUnionDues > 0);
+
+// Every ledger entry exposes a numeric unionDues >= 0.
+assert(
+  "dues: every ledger entry has a non-negative numeric unionDues",
+  duesResult.ledger.every(e => typeof e.unionDues === "number" && e.unionDues >= 0)
+);
+
+// Per-entry: dues equal exactly 2% of that entry's member income (c1Income + c2Income).
+// This proves donor income and fund interest are NOT dues-charged.
+assert(
+  "dues: each entry's unionDues equals 2% of its (c1Income + c2Income)",
+  duesResult.ledger.every(e =>
+    Math.abs(e.unionDues - 0.02 * ((e.c1Income || 0) + (e.c2Income || 0))) < 1e-6
+  )
+);
+
+// Run-level total equals 2% of the summed member contributions across the whole run.
+const summedMemberIncome = duesResult.ledger.reduce(
+  (sum, e) => sum + (e.c1Income || 0) + (e.c2Income || 0), 0
+);
+assertClose(
+  "dues: totalUnionDues equals 2% of summed member contributions",
+  duesResult.totalUnionDues, 0.02 * summedMemberIncome, 1e-6
+);
+
+// A mid-run entry: its dues are ~2% of its member income (spot check the ratio).
+const midEntry = duesResult.ledger[Math.floor(duesResult.ledger.length / 2)];
+const midMemberIncome = (midEntry.c1Income || 0) + (midEntry.c2Income || 0);
+if (midMemberIncome > 0) {
+  assertClose(
+    "dues: mid-run entry unionDues / member income ≈ 2%",
+    midEntry.unionDues / midMemberIncome, 0.02, 1e-9
+  );
+}
+
+// totalPaid is UNCHANGED by dues: members still pay full gross C1/C2 out of pocket.
+// Reconstruct each member's expected gross contribution from the ledger's member
+// counts (housed pay C2, waiting pay C1) — the fund's reduced receipt must NOT
+// reduce what a member paid. We verify the group's summed totalPaid equals the
+// summed gross member contributions collected over the run.
+const summedTotalPaid = duesResult.positions.reduce((s, p) => s + p.totalPaid, 0);
+assertClose(
+  "dues: summed totalPaid equals summed gross member contributions (dues did not reduce out-of-pocket)",
+  summedTotalPaid, summedMemberIncome, 6 // rounding tolerance across N members
+);
+
+// Dues genuinely slow the fund: a run with dues takes at least as many months as
+// the same run would with the member income scaled back up. We approximate the
+// no-dues baseline by boosting c1/c2 by 1/0.98 so the same net dollars reach the
+// fund — that faster-funded run must finish no later than the dues run.
+const boostedInputs = { ...duesInputs, c1: duesInputs.c1 / 0.98, c2: duesInputs.c2 / 0.98 };
+const boostedResult = calculateGroup(boostedInputs);
+assert(
+  "dues: run with dues takes at least as long as an equivalent no-dues-net run",
+  duesResult.totalMonths >= boostedResult.totalMonths
+);
+
+// Dropout / settle-up paths still run under dues and still expose totalUnionDues.
+const duesDropout = calculateGroupWithDropout(duesInputs, 0, {
+  memberIndex: 0, month: 300, salePrice: 420000,
+});
+assert("dues: dropout run completes without error", duesDropout.error === null);
+assert("dues: dropout run exposes totalUnionDues > 0", duesDropout.totalUnionDues > 0);
+assert(
+  "dues: post-move-in dropout still produces a saleEvent",
+  duesDropout.ledger.some(e => e.saleEvent)
 );
 
 // ─── Summary ──────────────────────────────────────────────────────────────────
