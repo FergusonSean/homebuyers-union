@@ -4,6 +4,12 @@
 
 "use strict";
 
+// Fraction of every member contribution (C1/C2) skimmed as union dues before the
+// remainder enters the fund. Members still pay the full C1/C2 out of pocket; only
+// the fund's receipt of member money is reduced by this rate. Donor contributions
+// and fund interest are never dues-charged (donors are not members).
+const UNION_DUES_RATE = 0.02;
+
 // ─── Mortgage helpers ────────────────────────────────────────────────────────
 
 // Returns the monthly payment for a fully-amortizing fixed-rate mortgage.
@@ -245,6 +251,10 @@ function calculateGroup(inputs, sequentialCount = 0) {
   const totalPaid          = new Array(N).fill(0);
   const ledger             = [];
 
+  // Running sum of union dues skimmed across the whole run (2% of every member
+  // contribution). Exposed as totalUnionDues on the returned object.
+  let totalUnionDues = 0;
+
   // fundOutlay[k] = cumulative cash the fund has actually spent on member k's house:
   // the down payment + purchase closing costs (seeded at purchase), plus every mortgage
   // dollar (principal + interest + any extra/surplus principal) and carrying-cost dollar
@@ -303,8 +313,11 @@ function calculateGroup(inputs, sequentialCount = 0) {
         return { error: "Simulation exceeded 1200 months. Try different inputs.", positions: null, totalMonths: null, traditional: null, ledger: null };
       }
       for (let i = 0; i < N; i++) totalPaid[i] += i < k ? c2 : c1;
+      const memberIncome = savingC2 + savingC1;
+      const unionDues    = UNION_DUES_RATE * memberIncome;
+      totalUnionDues    += unionDues;
       const fundInterestEarned = savingFund >= 0 ? savingFund * fundR : savingFund * r;
-      savingFund += savingC2 + savingC1 + monthlyDonorContrib + fundInterestEarned - housingCostsCumulative[k];
+      savingFund += memberIncome * (1 - UNION_DUES_RATE) + monthlyDonorContrib + fundInterestEarned - housingCostsCumulative[k];
       month++;
 
       // Housed members (0..k-1) have fully-paid-off mortgages here; the fund still
@@ -321,7 +334,8 @@ function calculateGroup(inputs, sequentialCount = 0) {
         c1Income:       savingC1,
         donorIncome:    monthlyDonorContrib,
         fundInterestEarned,
-        totalIncome:    savingC2 + savingC1 + monthlyDonorContrib + fundInterestEarned,
+        unionDues,
+        totalIncome:    memberIncome * (1 - UNION_DUES_RATE) + monthlyDonorContrib + fundInterestEarned,
         housingCosts:   housingCostsCumulative[k],
         fundBalance:    savingFund,
         downPaymentTarget: purchaseTargets[k],
@@ -343,8 +357,11 @@ function calculateGroup(inputs, sequentialCount = 0) {
     const payoffC2           = (k + 1) * c2;
     const payoffC1           = (N - k - 1) * c1;
     const payoffHousingCosts = housingCostsCumulative[k + 1];
-    const payoffGrossIncome  = payoffC2 + payoffC1 + monthlyDonorContrib;
-    const payoffIncome       = payoffGrossIncome - payoffHousingCosts;
+    // Only the member contributions are dues-charged; donor money is not.
+    const payoffMemberIncome = payoffC2 + payoffC1;
+    const payoffUnionDues    = UNION_DUES_RATE * payoffMemberIncome;
+    const payoffNetIncome    = payoffMemberIncome * (1 - UNION_DUES_RATE) + monthlyDonorContrib;
+    const payoffIncome       = payoffNetIncome - payoffHousingCosts;
 
     let mortgageBalance = Math.max(0, loanPrincipals[k] - savingFund);
     if (savingFund > loanPrincipals[k]) carryover = savingFund - loanPrincipals[k];
@@ -354,6 +371,7 @@ function calculateGroup(inputs, sequentialCount = 0) {
         return { error: "Simulation exceeded 1200 months. Try different inputs.", positions: null, totalMonths: null, traditional: null, ledger: null };
       }
       for (let i = 0; i < N; i++) totalPaid[i] += i <= k ? c2 : c1;
+      totalUnionDues += payoffUnionDues;
 
       const balanceBefore   = mortgageBalance;
       const interestCharged = balanceBefore * r;
@@ -381,7 +399,8 @@ function calculateGroup(inputs, sequentialCount = 0) {
         c2Income:       payoffC2,
         c1Income:       payoffC1,
         donorIncome:    monthlyDonorContrib,
-        totalIncome:    payoffGrossIncome,
+        unionDues:      payoffUnionDues,
+        totalIncome:    payoffNetIncome,
         housingCosts:   payoffHousingCosts,
         fundBalance: null, downPaymentTarget: null, housePurchased: null,
         mortgageBalanceBefore: balanceBefore,
@@ -411,8 +430,12 @@ function calculateGroup(inputs, sequentialCount = 0) {
     const preHouseMembers    = N - housedCount;
     const c2Income           = postHouseMembers * c2;
     const c1Income           = preHouseMembers  * c1;
+    // Only the member contributions are dues-charged; donor and interest are not.
+    const memberIncome       = c2Income + c1Income;
+    const unionDues          = UNION_DUES_RATE * memberIncome;
+    totalUnionDues          += unionDues;
     const fundInterestEarned = fundBalance >= 0 ? fundBalance * fundR : fundBalance * r;
-    const totalIncome        = c2Income + c1Income + monthlyDonorContrib + fundInterestEarned;
+    const totalIncome        = memberIncome * (1 - UNION_DUES_RATE) + monthlyDonorContrib + fundInterestEarned;
 
     // Sum mortgage payments only for Phase-B positions that have a live mortgage.
     const totalObligations = mortgageStartMonth.reduce((sum, startMonth, k) =>
@@ -474,6 +497,7 @@ function calculateGroup(inputs, sequentialCount = 0) {
       c1Income,
       donorIncome:          monthlyDonorContrib,
       fundInterestEarned,
+      unionDues,
       totalIncome,
       housingCosts:         currentHousingCosts,
       activeMortgages:      activeMortgagesSnapshot,
@@ -518,7 +542,11 @@ function calculateGroup(inputs, sequentialCount = 0) {
     }
 
     const activeMortgages  = balances.filter(b => b > 0).length;
-    const totalIncome      = N * c2 + monthlyDonorContrib;
+    // Only the member contributions (N × C2) are dues-charged; donor money is not.
+    const memberIncome     = N * c2;
+    const unionDues        = UNION_DUES_RATE * memberIncome;
+    totalUnionDues        += unionDues;
+    const totalIncome      = memberIncome * (1 - UNION_DUES_RATE) + monthlyDonorContrib;
     const totalAllHousingCosts = housingCostsList.reduce((a, b) => a + b, 0);
 
     // Sum the standard payment only for mortgages still carrying a positive balance.
@@ -581,6 +609,7 @@ function calculateGroup(inputs, sequentialCount = 0) {
       c1Income: 0,
       donorIncome: monthlyDonorContrib,
       fundInterestEarned: 0,
+      unionDues,
       totalIncome,
       housingCosts: totalAllHousingCosts,
       activeMortgages,
@@ -633,6 +662,7 @@ function calculateGroup(inputs, sequentialCount = 0) {
     })),
     ledger,
     sequentialCount,
+    totalUnionDues,
     error: null,
   };
 }
@@ -714,6 +744,10 @@ function calculateGroupSequential(inputs) {
   const totalPaid     = new Array(N).fill(0);
   const ledger        = [];
 
+  // Running sum of union dues skimmed across the whole run (2% of every member
+  // contribution). Donor money and fund interest are never dues-charged.
+  let totalUnionDues = 0;
+
   let month     = 0;
   let carryover = 0; // overpayment from previous payoff cycle
 
@@ -723,7 +757,10 @@ function calculateGroupSequential(inputs) {
     // Members 0..k-1 are housed (C2). Members k..N-1 are waiting (C1).
     const savingC2      = k * c2;
     const savingC1      = (N - k) * c1;
-    const savingIncome  = savingC2 + savingC1 + monthlyDonorContrib;
+    // Only the member contributions are dues-charged; donor money is not.
+    const savingMemberIncome = savingC2 + savingC1;
+    const savingUnionDues    = UNION_DUES_RATE * savingMemberIncome;
+    const savingNetIncome    = savingMemberIncome * (1 - UNION_DUES_RATE) + monthlyDonorContrib;
     let   fundBalance   = carryover;
     carryover           = 0;
 
@@ -735,8 +772,9 @@ function calculateGroupSequential(inputs) {
       for (let i = 0; i < N; i++) {
         totalPaid[i] += i < k ? c2 : c1;
       }
+      totalUnionDues += savingUnionDues;
       const fundInterestEarned = fundBalance >= 0 ? fundBalance * fundR : fundBalance * r;
-      fundBalance += savingIncome + fundInterestEarned - housingCostsCumulative[k];
+      fundBalance += savingNetIncome + fundInterestEarned - housingCostsCumulative[k];
       month++;
 
       ledger.push({
@@ -749,7 +787,8 @@ function calculateGroupSequential(inputs) {
         c1Income: savingC1,
         donorIncome: monthlyDonorContrib,
         fundInterestEarned,
-        totalIncome: savingIncome + fundInterestEarned,
+        unionDues: savingUnionDues,
+        totalIncome: savingNetIncome + fundInterestEarned,
         housingCosts: housingCostsCumulative[k],
         fundBalance,
         downPaymentTarget: purchaseTargets[k],
@@ -773,8 +812,11 @@ function calculateGroupSequential(inputs) {
     const payoffC2           = (k + 1) * c2;
     const payoffC1           = (N - k - 1) * c1;
     const payoffHousingCosts = housingCostsCumulative[k + 1];
-    const payoffGrossIncome  = payoffC2 + payoffC1 + monthlyDonorContrib;
-    const payoffIncome       = payoffGrossIncome - payoffHousingCosts;
+    // Only the member contributions are dues-charged; donor money is not.
+    const payoffMemberIncome = payoffC2 + payoffC1;
+    const payoffUnionDues    = UNION_DUES_RATE * payoffMemberIncome;
+    const payoffNetIncome    = payoffMemberIncome * (1 - UNION_DUES_RATE) + monthlyDonorContrib;
+    const payoffIncome       = payoffNetIncome - payoffHousingCosts;
 
     // The saving-phase overshoot reduces the starting mortgage balance.
     // If the overshoot fully covers the loan principal (including the 100% down
@@ -792,6 +834,7 @@ function calculateGroupSequential(inputs) {
       for (let i = 0; i < N; i++) {
         totalPaid[i] += i <= k ? c2 : c1;
       }
+      totalUnionDues += payoffUnionDues;
 
       const balanceBefore    = mortgageBalance;
       const interestCharged  = balanceBefore * r;
@@ -812,7 +855,8 @@ function calculateGroupSequential(inputs) {
         c2Income: payoffC2,
         c1Income: payoffC1,
         donorIncome: monthlyDonorContrib,
-        totalIncome: payoffGrossIncome,
+        unionDues: payoffUnionDues,
+        totalIncome: payoffNetIncome,
         housingCosts: payoffHousingCosts,
         fundBalance: null,
         downPaymentTarget: null,
@@ -863,6 +907,7 @@ function calculateGroupSequential(inputs) {
       },
     })),
     ledger,
+    totalUnionDues,
     error: null,
   };
 }
@@ -1124,6 +1169,11 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
   let month       = 0;
   let fundBalance = 0;
 
+  // Running sum of union dues skimmed across the whole run (2% of every member
+  // contribution that actually enters the fund). Donor money and fund interest are
+  // never dues-charged; departed members contribute nothing, so they add no dues.
+  let totalUnionDues = 0;
+
   // ── Phase A: sequential buy+payoff for the first sequentialCount homes ────────
   //
   // Mirrors calculateGroup's Phase A, but respects the contributing[] array and
@@ -1165,8 +1215,11 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
         totalPaid[i] += i < k ? c2 : c1;
       }
 
+      const memberIncome       = c2Income + c1Income;
+      const unionDues          = UNION_DUES_RATE * memberIncome;
+      totalUnionDues          += unionDues;
       const fundInterestEarned = savingFund >= 0 ? savingFund * fundR : savingFund * r;
-      savingFund += c2Income + c1Income + monthlyDonorContrib + fundInterestEarned - savingPhaseCosts;
+      savingFund += memberIncome * (1 - UNION_DUES_RATE) + monthlyDonorContrib + fundInterestEarned - savingPhaseCosts;
       month++;
 
       // Track carrying cost on the dropout house while it is housed (in an earlier
@@ -1185,7 +1238,8 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
         c1Income,
         donorIncome:    monthlyDonorContrib,
         fundInterestEarned,
-        totalIncome:    c2Income + c1Income + monthlyDonorContrib + fundInterestEarned,
+        unionDues,
+        totalIncome:    memberIncome * (1 - UNION_DUES_RATE) + monthlyDonorContrib + fundInterestEarned,
         housingCosts:   savingPhaseCosts,
         fundBalance:    savingFund,
         downPaymentTarget: purchaseTargets[k],
@@ -1297,8 +1351,11 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
         totalPaid[i] += i <= k ? c2 : c1;
       }
 
-      const grossIncome    = c2Income + c1Income + monthlyDonorContrib;
-      const payoffIncome   = grossIncome - payoffPhaseCosts;
+      const memberIncome   = c2Income + c1Income;
+      const unionDues      = UNION_DUES_RATE * memberIncome;
+      totalUnionDues      += unionDues;
+      const netIncome      = memberIncome * (1 - UNION_DUES_RATE) + monthlyDonorContrib;
+      const payoffIncome   = netIncome - payoffPhaseCosts;
 
       const balanceBefore  = mortgageBalance;
       const interestCharged = balanceBefore * r;
@@ -1328,7 +1385,8 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
         c2Income,
         c1Income,
         donorIncome:    monthlyDonorContrib,
-        totalIncome:    grossIncome,
+        unionDues,
+        totalIncome:    netIncome,
         housingCosts:   payoffPhaseCosts,
         fundBalance: null, downPaymentTarget: null, housePurchased: null,
         mortgageBalanceBefore: balanceBefore,
@@ -1453,8 +1511,12 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
 
     const c2Income           = postHouseMembers * c2;
     const c1Income           = preHouseMembers  * c1;
+    // Only the member contributions are dues-charged; donor and interest are not.
+    const memberIncome       = c2Income + c1Income;
+    const unionDues          = UNION_DUES_RATE * memberIncome;
+    totalUnionDues          += unionDues;
     const fundInterestEarned = fundBalance >= 0 ? fundBalance * fundR : fundBalance * r;
-    const totalIncome        = c2Income + c1Income + monthlyDonorContrib + fundInterestEarned;
+    const totalIncome        = memberIncome * (1 - UNION_DUES_RATE) + monthlyDonorContrib + fundInterestEarned;
 
     // Sum mortgage obligations: Phase-B mortgages only. Pending-sale mortgage still paid until sale.
     let totalObligations = 0;
@@ -1584,6 +1646,7 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
       c1Income,
       donorIncome:          monthlyDonorContrib,
       fundInterestEarned,
+      unionDues,
       totalIncome,
       housingCosts:         currentHousingCosts,
       activeMortgages:      activeMortgagesSnapshot,
@@ -1634,7 +1697,10 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
 
     // Income: contributing members only (dropout excluded).
     const c2Income    = contributing.filter(c => c).length * c2;
-    const totalIncome = c2Income + monthlyDonorContrib;
+    // Only the member contributions are dues-charged; donor money is not.
+    const unionDues   = UNION_DUES_RATE * c2Income;
+    totalUnionDues   += unionDues;
+    const totalIncome = c2Income * (1 - UNION_DUES_RATE) + monthlyDonorContrib;
 
     // Housing costs: all housed members. The dropout's house keeps being carried by
     // the fund until it is actually sold (dropoutMemberExcluded); it is only dropped
@@ -1748,6 +1814,7 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
       c1Income:         0,
       donorIncome:      monthlyDonorContrib,
       fundInterestEarned: 0,
+      unionDues,
       totalIncome,
       housingCosts:     totalHousingCosts,
       activeMortgages,
@@ -1831,6 +1898,7 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
     sequentialCount,
     dropout,
     dropoutRecovery,
+    totalUnionDues,
     error: null,
   };
 }

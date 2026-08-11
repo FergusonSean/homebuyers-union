@@ -432,7 +432,10 @@
         const housingCostLine = e.housingCosts > 0
           ? `<span class="ledger-sub">&minus;${formatDollars(e.housingCosts)} tax/ins/maint</span>`
           : '';
-        const incomeCell     = `${formatDollars(effectiveInc)}<span class="ledger-sub">${incomeFormula(e)}</span>${interestLine}${housingCostLine}`;
+        const duesLine       = e.unionDues > 0
+          ? `<span class="ledger-sub ledger-negative">&minus;${formatDollars(e.unionDues)} union dues (2%)</span>`
+          : '';
+        const incomeCell     = `${formatDollars(effectiveInc)}<span class="ledger-sub">${incomeFormula(e)}</span>${interestLine}${housingCostLine}${duesLine}`;
 
         const fmtFund = n => n < 0
           ? `<span class="ledger-negative">\u2212${formatDollars(n)}</span>`
@@ -729,13 +732,20 @@
         ? `<br><strong>Dropout scenario</strong>: Member&nbsp;${dropoutMemberIdx + 1} exits at month&nbsp;${firstValidDropout.dropout.month}. Each non-traditional cell shows the dropout-scenario outcome; sub-line shows baseline for comparison.`
         : "";
 
+      // Union dues note: every member contribution includes a 2% fee that funds the
+      // nonprofit's operations. Show the parallel model's run-total when available.
+      const parallelDues = models[0] && typeof models[0].totalUnionDues === "number"
+        ? models[0].totalUnionDues : null;
+      const duesNote = `<br><strong>Union dues:</strong> Each contribution includes a 2% union dues fee (nonprofit operating revenue) — donations and fund interest are not charged.` +
+        (parallelDues !== null ? ` Over the parallel model's full lifecycle the group pays ${formatDollars(parallelDues)} in dues.` : "");
+
       el.innerHTML = `
         <p class="calc-caption">Each row is one member's outcome. <span class="cmp-better-key">Green</span> means that member beats a traditional mortgage on that measure; red means they don't. Earlier positions are housed dramatically sooner than going it alone — change the inputs to see how it shakes out for your group.</p>
         <p class="calc-note" style="margin-bottom:0.5rem">
           <span class="cmp-better-key">Green</span> = better than traditional.
           <span class="cmp-worse-key">Red</span> = worse than traditional.
           "Seq. K" means the first K mortgages are paid off completely before switching to parallel for the rest.
-          "Traditional (same payments)" is the traditional path but paying your post-move-in amount each month instead of the standard payment.${dropoutNote}
+          "Traditional (same payments)" is the traditional path but paying your post-move-in amount each month instead of the standard payment.${duesNote}${dropoutNote}
         </p>
         <p class="calc-note" style="font-size:0.75rem;margin-bottom:1rem">Each cell: <strong>time until housed</strong> / total paid / cost per month housed. That last figure is a member's full housing cost averaged over a ${windowLabel} window — a price comparison, not a wait time.${dropoutResults ? " (Dropout scenario; sub-line = baseline.)" : ""}</p>
 
