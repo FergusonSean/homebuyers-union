@@ -626,7 +626,7 @@
             // Dropout member's cell: show their own outcome — what they walk away with.
             if (drPos && i === dropoutMemberIdx) {
               const rec       = dr.dropoutRecovery;
-              const recLabel  = rec && rec.type === "post-move-in" ? "equity" : "refund";
+              const recLabel  = rec && rec.type === "post-move-in" ? "cash out" : "refund";
               const recLine   = rec
                 ? `<span class="ledger-sub cmp-better">gets back ~${formatDollars(rec.amount)} (${recLabel})</span>`
                 : "";
