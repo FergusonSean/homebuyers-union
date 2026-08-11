@@ -398,6 +398,20 @@
         return notes;
       }
 
+      // Renders the per-member settle-up cell: one stacked line per member showing
+      // where they stand with the fund (positive/green while saving, negative/red
+      // once housed and still owing, muted $0 once they have covered the fund's cost).
+      function buildSettleCell(e) {
+        if (!e.settleUp) return '&mdash;';
+        return e.settleUp.map((v, k) => {
+          const rounded = Math.round(v);
+          const cls     = rounded > 0 ? 'cmp-better' : rounded < 0 ? 'cmp-worse' : 'ledger-sub';
+          const sign    = rounded > 0 ? '+' : rounded < 0 ? '−' : '';
+          const amount  = rounded === 0 ? '$0' : `${sign}${formatDollars(rounded)}`;
+          return `<span class="ledger-mortgage-line ${cls}">#${k + 1}: ${amount}</span>`;
+        }).join('');
+      }
+
       const rows = result.ledger.map(e => {
         const notes         = buildEventNotes(e);
         const housed        = e.postHouseMembers ?? e.housedMembers  ?? 0;
@@ -484,6 +498,7 @@
           <td class="ledger-num">${incomeCell}</td>
           <td class="ledger-balance">${fundCell}</td>
           <td class="ledger-mortgages">${mortgageCell}</td>
+          <td class="ledger-settle">${buildSettleCell(e)}</td>
           <td>${notes.join('')}</td>
         </tr>`;
       }).join('');
@@ -508,15 +523,16 @@
           <table class="ledger-table">
             <colgroup>
               <col style="width:5%">
-              <col style="width:10%">
-              <col style="width:12%">
+              <col style="width:9%">
+              <col style="width:11%">
+              <col style="width:16%">
               <col style="width:18%">
-              <col style="width:20%">
-              <col style="width:22%">
-              <col style="width:13%">
+              <col style="width:19%">
+              <col style="width:11%">
+              <col style="width:11%">
             </colgroup>
             <thead><tr>
-              <th>Month</th><th>Phase</th><th>Members</th><th>Net Income</th><th>Fund</th><th>Mortgages</th><th>Notes</th>
+              <th>Month</th><th>Phase</th><th>Members</th><th>Net Income</th><th>Fund</th><th>Mortgages</th><th>Settle-up</th><th>Notes</th>
             </tr></thead>
             <tbody>${rows}</tbody>
           </table>

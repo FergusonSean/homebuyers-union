@@ -1064,6 +1064,12 @@ a.nav__wordmark:hover {
   font-variant-numeric: tabular-nums;
 }
 
+.ledger-settle {
+  font-size: 0.72rem;
+  line-height: 1.7;
+  font-variant-numeric: tabular-nums;
+}
+
 .ledger-pos {
   color: #1a6b1a;
   font-weight: 600;

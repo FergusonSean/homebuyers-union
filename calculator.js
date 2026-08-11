@@ -245,6 +245,33 @@ function calculateGroup(inputs, sequentialCount = 0) {
   const totalPaid          = new Array(N).fill(0);
   const ledger             = [];
 
+  // fundOutlay[k] = cumulative cash the fund has actually spent on member k's house:
+  // the down payment + purchase closing costs (seeded at purchase), plus every mortgage
+  // dollar (principal + interest + any extra/surplus principal) and carrying-cost dollar
+  // the fund pays toward that house each active month. Generalizes the dropout tracker
+  // to all N members. Used only to derive the per-member settle-up figure.
+  const fundOutlay = new Array(N).fill(0);
+
+  // Builds the per-member settle-up array for a ledger entry, using the balances and
+  // totals as they stand at that entry's month. Not-yet-housed → +totalPaid (refundable);
+  // housed → −max(0, (fundOutlay + remaining balance) − totalPaid), never positive.
+  // currentBalanceOf(k) returns member k's remaining mortgage balance at this point.
+  function computeSettleUp(currentBalanceOf) {
+    // Once every member is housed, the fund has no more houses to buy, so a housed
+    // member's settle-up (what they'd owe the fund on exit) is capped at the group's
+    // total remaining mortgage balance — the most the fund could still need. As that
+    // total falls to 0 near dissolution, every member's settle-up rises to exactly 0.
+    const allHoused = housedAtMonth.every(m => m !== null);
+    const totalRemainingMortgages = allHoused
+      ? Array.from({ length: N }, (_, k) => currentBalanceOf(k)).reduce((a, b) => a + b, 0)
+      : Infinity;
+    return Array.from({ length: N }, (_, k) => {
+      if (housedAtMonth[k] === null) return totalPaid[k];
+      const owed = (fundOutlay[k] + currentBalanceOf(k)) - totalPaid[k];
+      return -Math.max(0, Math.min(owed, totalRemainingMortgages));
+    });
+  }
+
   let month         = 0;
   let fundBalance   = 0;
   let housedCount   = 0;
@@ -279,6 +306,11 @@ function calculateGroup(inputs, sequentialCount = 0) {
       const fundInterestEarned = savingFund >= 0 ? savingFund * fundR : savingFund * r;
       savingFund += savingC2 + savingC1 + monthlyDonorContrib + fundInterestEarned - housingCostsCumulative[k];
       month++;
+
+      // Housed members (0..k-1) have fully-paid-off mortgages here; the fund still
+      // pays their carrying cost each saving month, so accrue it to their outlay.
+      for (let i = 0; i < k; i++) fundOutlay[i] += housingCostsList[i];
+
       ledger.push({
         month,
         phase:          'saving',
@@ -297,11 +329,15 @@ function calculateGroup(inputs, sequentialCount = 0) {
         housePurchased: savingFund >= purchaseTargets[k],
         mortgageBalanceBefore: null, interestCharged: null,
         principalPaid: null, mortgageBalanceAfter: null, overpayment: null,
+        // Housed members here have paid-off mortgages, so remaining balance is 0.
+        settleUp: computeSettleUp(() => 0),
       });
     }
 
     savingFund -= purchaseTargets[k];
     housedAtMonth[k] = month;
+    // Seed member k's outlay with the down payment + purchase closing costs.
+    fundOutlay[k] += downPayments[k] + closingCostsList[k];
 
     // Payoff sub-phase: k+1 members housed; ALL income → this mortgage.
     const payoffC2           = (k + 1) * c2;
@@ -330,6 +366,12 @@ function calculateGroup(inputs, sequentialCount = 0) {
       month++;
       if (overpayment > 0) carryover = overpayment;
 
+      // The fund pays `payment` toward member k's mortgage this month; every housed
+      // member (0..k) also has carrying cost paid by the fund. Overpayment carries to
+      // the next cycle rather than being spent on a house, so it is not counted here.
+      fundOutlay[k] += payment;
+      for (let i = 0; i <= k; i++) fundOutlay[i] += housingCostsList[i];
+
       ledger.push({
         month,
         phase:          'payoff',
@@ -347,6 +389,8 @@ function calculateGroup(inputs, sequentialCount = 0) {
         principalPaid,
         mortgageBalanceAfter: mortgageBalance,
         overpayment,
+        // Only member k carries a live balance in this sub-phase; 0..k-1 are paid off.
+        settleUp: computeSettleUp(i => (i === k ? mortgageBalance : 0)),
       });
     }
   }
@@ -387,6 +431,14 @@ function calculateGroup(inputs, sequentialCount = 0) {
       totalPaid[k] += housedAtMonth[k] !== null ? c2 : c1;
     }
 
+    // This month the fund pays each active Phase-B mortgage its standard payment
+    // (principal + interest) and each currently-housed member's carrying cost. Uses
+    // the same pre-purchase gates as totalObligations / currentHousingCosts above.
+    for (let k = 0; k < N; k++) {
+      if (mortgageStartMonth[k] !== null) fundOutlay[k] += mortgagePayments[k];
+      if (housedAtMonth[k] !== null)      fundOutlay[k] += housingCostsList[k];
+    }
+
     fundBalance += netGrowth;
     month++;
 
@@ -400,6 +452,8 @@ function calculateGroup(inputs, sequentialCount = 0) {
       fundBalance -= purchaseTargets[idx];
       housedAtMonth[idx]      = month;
       mortgageStartMonth[idx] = month;
+      // Seed member idx's outlay with the down payment + purchase closing costs.
+      fundOutlay[idx] += downPayments[idx] + closingCostsList[idx];
       housePurchased = {
         position:             idx + 1,
         outright:             false,
@@ -433,6 +487,13 @@ function calculateGroup(inputs, sequentialCount = 0) {
       housePurchased,
       mortgageDetails:      null,
       surplus:              0,
+      // Phase-B mortgages carry a live balance from their amortization schedule;
+      // Phase-A members are housed with paid-off mortgages (balance 0).
+      settleUp: computeSettleUp(k =>
+        mortgageStartMonth[k] !== null
+          ? Math.max(0, remainingBalance(loanPrincipals[k], annualRatePct, termYears, month - mortgageStartMonth[k]))
+          : 0
+      ),
     });
   }
 
@@ -502,6 +563,15 @@ function calculateGroup(inputs, sequentialCount = 0) {
       balances = result.updatedBalances;
     }
 
+    // The fund's actual cash toward each member's house this month: the standard
+    // payment (principal + interest), any extra/surplus principal directed at it, and
+    // the carrying cost. Members with a paid-off mortgage still incur carrying cost.
+    for (let k = 0; k < N; k++) {
+      const d = mortgageDetails[k];
+      fundOutlay[k] += d.principalFromPayment + d.interestCharged + d.extraPrincipal;
+      if (housedAtMonth[k] !== null) fundOutlay[k] += housingCostsList[k];
+    }
+
     ledger.push({
       month,
       phase: 2,
@@ -524,6 +594,8 @@ function calculateGroup(inputs, sequentialCount = 0) {
       housePurchased: null,
       mortgageDetails,
       surplus,
+      // Every member is housed here; balances[k] is the live post-payment balance.
+      settleUp: computeSettleUp(k => balances[k]),
     });
   }
 
@@ -979,7 +1051,15 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
   // member paid in, plus a 1% fee. fundNet is what actually lands in the fund and
   // may be negative (a loss the group absorbs).
   //   salePrice === remainingBal + saleTxnCosts + fundNet + memberWalkAway.
-  function buildSaleEvent(remainingBal) {
+  //
+  // Once every member is housed (allHoused), amountOwed is additionally capped at
+  // totalRemainingMortgages — the sum of ALL members' current remaining mortgage
+  // balances at the sale month, INCLUDING the departing member's own. Rationale: with
+  // no houses left to buy, the fund needs only enough to finish paying off the group's
+  // mortgages; collecting more would just hoard cash. Before all housed, no cap applies
+  // (the fund still needs money to buy the remaining houses), so callers pass
+  // allHoused=false / totalRemainingMortgages=Infinity there.
+  function buildSaleEvent(remainingBal, allHoused, totalRemainingMortgages) {
     const fundOutlay      = dropoutHouseFundOutlay;                 // (A)
     const saleTxnCosts    = salePrice * closingCostsPct / 100;     // (C)
     const responsibility  = fundOutlay + remainingBal + saleTxnCosts; // A + B + C
@@ -989,7 +1069,9 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
     // their house has been subsidizing the group. On exit they get their full house
     // value back but do not reclaim that subsidy — it stays with the group — so no
     // one ever walks away with more than the sale price.
-    const amountOwed      = Math.max(0, responsibility - memberPaid + fee);
+    const rawAmountOwed   = responsibility - memberPaid + fee;
+    const cap             = allHoused ? totalRemainingMortgages : Infinity;
+    const amountOwed      = Math.max(0, Math.min(rawAmountOwed, cap));
     const memberWalkAway  = Math.max(0, salePrice - amountOwed);
     const fundNet         = salePrice - memberWalkAway - saleTxnCosts - remainingBal;
     return {
@@ -1004,6 +1086,8 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
       amountOwed,
       memberWalkAway,
       fundNet,
+      allHoused,
+      totalRemainingMortgages,
     };
   }
 
@@ -1013,6 +1097,17 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
   const mortgageStartMonth = new Array(N).fill(null);
   // Running total paid per member.
   const totalPaid          = new Array(N).fill(0);
+
+  // Returns { allHoused, totalRemainingMortgages } for a sale at the current month,
+  // for feeding buildSaleEvent's cap. allHoused is true only when every member is
+  // housed. totalRemainingMortgages sums balanceOf(k) over all members (each caller
+  // supplies balanceOf appropriate to its phase — 0 for not-housed / paid-off members).
+  function saleCapInputs(balanceOf) {
+    const allHoused = housedAtMonth.every(m => m !== null);
+    let totalRemainingMortgages = 0;
+    for (let k = 0; k < N; k++) totalRemainingMortgages += balanceOf(k);
+    return { allHoused, totalRemainingMortgages };
+  }
 
   // contributing[k] = true while member k is actively paying into the fund.
   // Starts true for all; set false when the dropout event fires.
@@ -1149,7 +1244,11 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
         // We approximate the balance using elapsed months since they were housed.
         const monthsPaid   = month - housedAtMonth[dropoutIdx];
         const remainingBal = Math.max(0, remainingBalance(loanPrincipals[dropoutIdx], annualRatePct, termYears, monthsPaid));
-        const saleEvent    = buildSaleEvent(remainingBal);
+        // In Phase A only the departing member's house carries a live balance at a
+        // sale; every other housed member's mortgage was paid off in its own cycle.
+        const { allHoused, totalRemainingMortgages } =
+          saleCapInputs(k => (k === dropoutIdx ? remainingBal : 0));
+        const saleEvent    = buildSaleEvent(remainingBal, allHoused, totalRemainingMortgages);
         savingFund                += saleEvent.fundNet;
         dropoutMortgagePendingSale = false;
         dropoutMemberExcluded      = true;   // stop charging housing costs for sold house
@@ -1291,7 +1390,15 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
           const monthsPaid = month - housedAtMonth[dropoutIdx];
           remainingBal  = Math.max(0, remainingBalance(loanPrincipals[dropoutIdx], annualRatePct, termYears, monthsPaid));
         }
-        const saleEvent = buildSaleEvent(remainingBal);
+        // Live balances during the payoff sub-phase: the departing member's house
+        // (remainingBal) and the house currently being paid off (mortgageBalance, when
+        // it is a different member). All earlier-cycle houses are already paid off.
+        const { allHoused, totalRemainingMortgages } = saleCapInputs(i => {
+          if (i === dropoutIdx) return remainingBal;
+          if (i === k) return mortgageBalance;
+          return 0;
+        });
+        const saleEvent = buildSaleEvent(remainingBal, allHoused, totalRemainingMortgages);
         carryover            += saleEvent.fundNet;
         dropoutMemberExcluded = true;   // stop charging housing costs for sold house in subsequent cycles
 
@@ -1430,7 +1537,16 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
       const startMonth   = mortgageStartMonth[dropoutIdx] ?? housedAtMonth[dropoutIdx];
       const monthsPaid   = month - startMonth;
       const remainingBal = Math.max(0, remainingBalance(loanPrincipals[dropoutIdx], annualRatePct, termYears, monthsPaid));
-      saleEventThisMonth = buildSaleEvent(remainingBal);
+      // Live balances in Phase B1: every position with an active Phase-B mortgage,
+      // scheduled from its own start month. Phase-A houses are paid off (0). The
+      // departing member uses the balance just computed above. (allHoused is false
+      // here anyway — Phase B1 still has unhoused members — so the cap won't bind.)
+      const { allHoused, totalRemainingMortgages } = saleCapInputs(k => {
+        if (k === dropoutIdx) return remainingBal;
+        if (mortgageStartMonth[k] === null) return 0;
+        return Math.max(0, remainingBalance(loanPrincipals[k], annualRatePct, termYears, month - mortgageStartMonth[k]));
+      });
+      saleEventThisMonth = buildSaleEvent(remainingBal, allHoused, totalRemainingMortgages);
       fundBalance       += saleEventThisMonth.fundNet;
       dropoutMortgagePendingSale = false;
       if (mortgageStartMonth[dropoutIdx] !== null) mortgageCount--;
@@ -1611,7 +1727,12 @@ function calculateGroupWithDropout(inputs, sequentialCount, dropout) {
     let saleEventThisMonth = null;
     if (dropoutMortgagePendingSale && month === dropoutSaleMonth) {
       const remainingBal = Math.max(0, balances[dropoutIdx]);
-      saleEventThisMonth = buildSaleEvent(remainingBal);
+      // In Phase B2 every member is housed and `balances` holds each member's live
+      // post-payment mortgage balance (0 for paid-off / already-sold houses), so the
+      // total remaining mortgages is just their sum.
+      const { allHoused, totalRemainingMortgages } =
+        saleCapInputs(k => Math.max(0, balances[k]));
+      saleEventThisMonth = buildSaleEvent(remainingBal, allHoused, totalRemainingMortgages);
       fundBalance       += saleEventThisMonth.fundNet;
       dropoutMortgagePendingSale = false;
       dropoutMemberExcluded      = true;

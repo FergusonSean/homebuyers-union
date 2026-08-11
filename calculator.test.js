@@ -693,6 +693,118 @@ if (seqPostEvent) {
     seqPostEvent.dropoutEvent.saleMonth === member0HousedInK2 + 2 + 2);
 }
 
+// ─── Settle-up figure (calculateGroup) ────────────────────────────────────────
+
+console.log("\nsettle-up figure:");
+
+const settleInputs = {
+  homePrice: 300000, groupSize: 3, c1: 200, c2: 2800, downPaymentPct: 0.20,
+  annualRatePct: 7, termYears: 30, fundYieldPct: 3, propertyTaxPct: 1.1,
+  insuranceMonthly: 150, closingCostsPct: 3, maintenancePct: 1,
+};
+const settleRes = calculateGroup(settleInputs, 0);
+
+assert("settle-up: simulation completes without error", settleRes.error === null);
+
+assert(
+  "settle-up: every ledger entry has a settleUp array of length groupSize",
+  settleRes.ledger.every(e => Array.isArray(e.settleUp) && e.settleUp.length === settleInputs.groupSize)
+);
+
+const firstEntry = settleRes.ledger[0];
+assert(
+  "settle-up: first entry (nobody housed) has all values >= 0 (saving)",
+  firstEntry.settleUp.every(v => v >= 0)
+);
+
+const lastEntry = settleRes.ledger[settleRes.ledger.length - 1];
+const housedByLast = settleRes.positions.map(p => p.monthsUntilHoused !== null);
+assert(
+  "settle-up: last entry has every housed member's value <= 0 (never positive after housed)",
+  lastEntry.settleUp.every((v, k) => !housedByLast[k] || v <= 0)
+);
+
+const m0HousedMonth = settleRes.positions[0].monthsUntilHoused;
+assert(
+  "settle-up: member 0 has an entry with a negative value after being housed",
+  settleRes.ledger.some(e => e.month > m0HousedMonth && e.settleUp[0] < 0)
+);
+
+// With the all-housed cap, every member's settle-up converges to 0 at gifting: the
+// group's total remaining mortgages fall to 0, so no member's owed amount survives the
+// cap. The FINAL ledger entry must therefore read exactly 0 for every member.
+assert(
+  "settle-up: final ledger entry has every member's value === 0 (within 1e-6)",
+  lastEntry.settleUp.every(v => Math.abs(v) <= 1e-6)
+);
+
+// ─── settle-up / exit cap: all-housed cap on amountOwed ─────────────────────────
+
+console.log("\npost-move-in exit: all-housed cap on amountOwed:");
+
+const capInputs = {
+  homePrice: 300000, groupSize: 6, c1: 200, c2: 2800, downPaymentPct: 0.20,
+  annualRatePct: 7, termYears: 30, fundYieldPct: 3, propertyTaxPct: 1.1,
+  insuranceMonthly: 150, closingCostsPct: 3, maintenancePct: 1,
+};
+
+// Total months for the group of 6 (no dropout), to pick a near-end sale month.
+const capBaseline = calculateGroup(capInputs, 0);
+assert("exit cap: baseline group-of-6 completes", capBaseline.error === null);
+const capTotalMonths = capBaseline.totalMonths;
+
+// A subsidized late member (index 5) selling a few rows before dissolution, after
+// their own mortgage is paid off. All members are housed by then, so the cap applies.
+// The sale is scheduled two months after the dropout, so drop out at totalMonths − 6
+// to keep the sale within the simulation, and sell at the home's value.
+const nearEndMonth = capTotalMonths - 6;
+const nearEndExit = calculateGroupWithDropout(capInputs, 0, {
+  memberIndex: 5, month: nearEndMonth, salePrice: 300000,
+});
+assert("exit cap: near-end exit completes", nearEndExit.error === null);
+const nearEndSale = nearEndExit.ledger.map(e => e.saleEvent).find(s => s);
+assert("exit cap: near-end sale event exists", !!nearEndSale);
+assert(
+  "exit cap: near-end sale is all-housed",
+  nearEndSale.allHoused === true
+);
+assert(
+  "exit cap: amountOwed <= totalRemainingMortgages (cap binds when all housed)",
+  nearEndSale.amountOwed <= nearEndSale.totalRemainingMortgages + 1e-6
+);
+assert(
+  "exit cap: near-end memberWalkAway is non-negative",
+  nearEndSale.memberWalkAway >= 0
+);
+assert(
+  "exit cap: near-end conservation holds",
+  Math.abs(
+    nearEndSale.salePrice -
+    (nearEndSale.remainingBalance + nearEndSale.saleTxnCosts + nearEndSale.fundNet + nearEndSale.memberWalkAway)
+  ) <= 1e-6
+);
+
+// An early exit (member 0 while the group is still buying houses) is NOT all-housed,
+// so the cap does not apply: amountOwed equals the uncapped max(0, responsibility − paid + fee).
+const earlyExit = calculateGroupWithDropout(capInputs, 0, {
+  memberIndex: 0, month: 90, salePrice: 300000,
+});
+assert("exit cap: early exit completes", earlyExit.error === null);
+const earlySale = earlyExit.ledger.map(e => e.saleEvent).find(s => s);
+assert("exit cap: early sale event exists", !!earlySale);
+assert(
+  "exit cap: early exit is NOT all-housed (cap gated off)",
+  earlySale.allHoused === false
+);
+const earlyUncapped = Math.max(
+  0,
+  earlySale.responsibility - earlySale.memberPaid + earlySale.fee
+);
+assertClose(
+  "exit cap: early amountOwed equals uncapped max(0, responsibility − paid + fee)",
+  earlySale.amountOwed, earlyUncapped, 1e-6
+);
+
 // ─── Summary ──────────────────────────────────────────────────────────────────
 
 console.log(`\n${passed + failed} tests: ${passed} passed, ${failed} failed.`);
