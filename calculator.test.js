@@ -343,7 +343,7 @@ if (postSaleEvent) {
   // transaction costs (C) — less what the member paid in, plus a 1% fee. The buyer
   // pays cash; the member walks away with max(0, salePrice − amountOwed).
   //   responsibility = fundOutlay + remainingBalance + saleTxnCosts
-  //   amountOwed     = responsibility − memberPaid + 0.01*memberPaid
+  //   amountOwed     = max(0, responsibility − memberPaid + 0.01*memberPaid)  [floored]
   //   fundNet        = salePrice − memberWalkAway − saleTxnCosts − remainingBalance
   // Conservation: remainingBalance + saleTxnCosts + fundNet + memberWalkAway === salePrice.
   const se = postSaleEvent.saleEvent;
@@ -355,8 +355,8 @@ if (postSaleEvent) {
   assert("post-move-in dropout: saleEvent exposes fundNet",        typeof se.fundNet === 'number');
   assertClose("post-move-in dropout: responsibility === fundOutlay + remainingBalance + saleTxnCosts",
     se.responsibility, se.fundOutlay + se.remainingBalance + se.saleTxnCosts, 1e-6);
-  assertClose("post-move-in dropout: amountOwed === responsibility − memberPaid + 0.01*memberPaid",
-    se.amountOwed, se.responsibility - se.memberPaid + 0.01 * se.memberPaid, 1e-6);
+  assertClose("post-move-in dropout: amountOwed === max(0, responsibility − memberPaid + 0.01*memberPaid)",
+    se.amountOwed, Math.max(0, se.responsibility - se.memberPaid + 0.01 * se.memberPaid), 1e-6);
   assertClose("post-move-in dropout: memberWalkAway === max(0, salePrice − amountOwed)",
     se.memberWalkAway, Math.max(0, se.salePrice - se.amountOwed), 1e-6);
   assert("post-move-in dropout: memberWalkAway is floored at 0", se.memberWalkAway >= 0);
@@ -401,8 +401,8 @@ if (fairSale) {
     fairSale.responsibility, fairSale.fundOutlay + fairSale.remainingBalance + fairSale.saleTxnCosts, 1e-6
   );
   assertClose(
-    "fair-price sale: amountOwed === responsibility − memberPaid + 0.01*memberPaid",
-    fairSale.amountOwed, fairSale.responsibility - fairSale.memberPaid + 0.01 * fairSale.memberPaid, 1e-6
+    "fair-price sale: amountOwed === max(0, responsibility − memberPaid + 0.01*memberPaid)",
+    fairSale.amountOwed, Math.max(0, fairSale.responsibility - fairSale.memberPaid + 0.01 * fairSale.memberPaid), 1e-6
   );
   assertClose(
     "fair-price sale: conservation (remainingBalance + saleTxnCosts + fundNet + memberWalkAway === salePrice)",
@@ -464,6 +464,119 @@ assert("late dropout: all members housed", lateDropout.positions.every(p => p.mo
 // No dropout event should appear in the ledger.
 const hasDropoutEvent = lateDropout.ledger.some(e => e.dropoutEvent);
 assert("late dropout: no dropoutEvent in ledger (dropout month never reached)", !hasDropoutEvent);
+
+// ─── calculateGroupWithDropout — post-move-in dropout during Phase B2 ──────────
+
+console.log("\ncalculateGroupWithDropout — late (payoff-phase) post-move-in dropout:");
+
+// A large parallel group with modest contributions houses everyone well before the
+// mortgages are paid off, so the simulation spends a long stretch in Phase B2 (the
+// payoff phase). A dropout scheduled for month 230 lands inside Phase B2: every
+// member is already housed, so it must be handled as a post-move-in exit with a
+// sale, exactly as a Phase-B1 post-move-in dropout would be.
+const b2DropoutInputs = {
+  homePrice:           300000,
+  groupSize:           6,
+  c1:                  200,
+  c2:                  2800,
+  downPaymentPct:      0.20,
+  annualRatePct:       7,
+  termYears:           30,
+  monthlyDonorContrib: 0,
+  fundYieldPct:        3,
+  propertyTaxPct:      1.1,
+  insuranceMonthly:    150,
+  closingCostsPct:     3,
+  maintenancePct:      1,
+};
+
+const b2Dropout = calculateGroupWithDropout(b2DropoutInputs, 0, {
+  memberIndex: 5,
+  month:       230,
+  salePrice:   300000,
+});
+
+assert("B2 dropout: no error", b2Dropout.error === null);
+
+// The dropout month must genuinely fall inside Phase B2 for this test to be
+// meaningful: every member should be housed before month 230.
+const allHousedBefore230 = b2Dropout.positions.every(
+  (p, k) => k === 5 || (p.monthsUntilHoused !== null && p.monthsUntilHoused < 230)
+);
+assert("B2 dropout: all non-dropout members housed before month 230 (dropout is in Phase B2)", allHousedBefore230);
+
+const b2DropoutEvent = b2Dropout.ledger.find(e => e.dropoutEvent);
+const b2SaleEvent    = b2Dropout.ledger.find(e => e.saleEvent);
+
+assert("B2 dropout: ledger contains a dropoutEvent entry", b2DropoutEvent !== undefined);
+assert("B2 dropout: ledger contains a saleEvent entry",    b2SaleEvent    !== undefined);
+assert("B2 dropout: sale entry is in Phase B2", b2SaleEvent !== undefined && b2SaleEvent.phase === 2);
+
+if (b2DropoutEvent) {
+  assert("B2 dropout: dropoutEvent.type is post-move-in", b2DropoutEvent.dropoutEvent.type === 'post-move-in');
+  assert("B2 dropout: dropoutEvent.saleMonth = dropoutMonth + 2", b2DropoutEvent.dropoutEvent.saleMonth === 232);
+  assert("B2 dropout: dropoutEvent.c1Refund is null", b2DropoutEvent.dropoutEvent.c1Refund === null);
+}
+
+assert("B2 dropout: dropoutRecovery is non-null", b2Dropout.dropoutRecovery !== null);
+if (b2Dropout.dropoutRecovery) {
+  assert("B2 dropout: dropoutRecovery.type is post-move-in", b2Dropout.dropoutRecovery.type === 'post-move-in');
+  assert("B2 dropout: dropoutRecovery is for the dropped member (index 5)", b2Dropout.dropoutRecovery.memberIndex === 5);
+}
+
+if (b2SaleEvent) {
+  const se = b2SaleEvent.saleEvent;
+  // Conservation invariant: the buyer's cash exactly covers the payoff, the sale-side
+  // transaction costs, whatever nets into the fund, and what the member walks away with.
+  assertClose("B2 dropout: conservation remainingBalance + saleTxnCosts + fundNet + memberWalkAway === salePrice",
+    se.remainingBalance + se.saleTxnCosts + se.fundNet + se.memberWalkAway, se.salePrice, 1e-6);
+  // The fund paid real cash toward the dropout house across the simulation.
+  assert("B2 dropout: fundOutlay > 0", se.fundOutlay > 0);
+}
+
+// When the dropout member's house is the last, highest-balance mortgage still being
+// paid off, Phase B2 directs extra principal onto it before the sale. That extra
+// principal is real cash the fund pays toward the house, so its tracked outlay must
+// exceed the down payment + purchase closing + the bare standard payments alone.
+// Member 5 is housed last (highest remaining balance during payoff), so a dropout
+// scheduled late enough exercises this path.
+const b2LateDropout = calculateGroupWithDropout(b2DropoutInputs, 0, {
+  memberIndex: 5,
+  month:       300,
+  salePrice:   300000,
+});
+if (b2LateDropout.error === null) {
+  const lateSale = b2LateDropout.ledger.find(e => e.saleEvent);
+  if (lateSale) {
+    const downPlusClosing = 300000 * 0.20 + 300000 * 3 / 100;
+    // Two-month bridge standard payments would add at most a few thousand; the large
+    // gap between fundOutlay and (down + closing) here reflects extra principal the
+    // fund routed onto this mortgage during payoff.
+    assert("B2 late dropout (highest balance): fundOutlay reflects extra principal (exceeds down + closing)",
+      lateSale.saleEvent.fundOutlay > downPlusClosing);
+  }
+}
+
+// Over-contributing member: the earliest member, dropping very late, has paid in
+// more than the fund's total responsibility for their house (they subsidized the
+// group for years). The raw amountOwed goes negative, but it is FLOORED at 0 — the
+// member gets their full house value back and does not reclaim the subsidy, so they
+// never walk away with more than the sale price.
+const overpaidDropout = calculateGroupWithDropout(b2DropoutInputs, 0, {
+  memberIndex: 0,
+  month:       350,
+  salePrice:   300000,
+});
+if (overpaidDropout.error === null) {
+  const se = overpaidDropout.ledger.find(e => e.saleEvent);
+  if (se) {
+    const rawOwed = se.saleEvent.responsibility - se.saleEvent.memberPaid + 0.01 * se.saleEvent.memberPaid;
+    assert("overpaid dropout: raw amountOwed is negative (member over-contributed)", rawOwed < 0);
+    assert("overpaid dropout: amountOwed is floored at 0", se.saleEvent.amountOwed === 0);
+    assertClose("overpaid dropout: member walks away with exactly the sale price (no more)",
+      se.saleEvent.memberWalkAway, se.saleEvent.salePrice, 1e-6);
+  }
+}
 
 console.log("\ncalculateGroupWithDropout — sequentialCount=1 now supported:");
 
