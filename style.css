@@ -1064,6 +1064,12 @@ a.nav__wordmark:hover {
   font-variant-numeric: tabular-nums;
 }
 
+.ledger-settle {
+  font-size: 0.72rem;
+  line-height: 1.7;
+  font-variant-numeric: tabular-nums;
+}
+
 .ledger-pos {
   color: #1a6b1a;
   font-weight: 600;
@@ -1189,9 +1195,58 @@ a.nav__wordmark:hover {
 /* ── Dropout scenario section ───────────────────────────────────────────────── */
 
 .dropout-section {
-  margin-top: 3rem;
-  padding-top: 2rem;
+  grid-column: 1 / -1;
+  margin-top: 1.5rem;
+  padding-top: 1.75rem;
   border-top: 1px solid #ddd9d2;
+}
+
+/* Exit-scenario preset buttons */
+.dropout-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1.25rem;
+}
+
+.dropout-preset {
+  font-family: "Inter", sans-serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.4rem 0.85rem;
+  border: 1px solid #ccc8c0;
+  border-radius: 999px;
+  background-color: #FAF8F5;
+  color: #1C1C1C;
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s, color 0.15s;
+}
+
+.dropout-preset:hover {
+  border-color: #8B1A1A;
+  color: #8B1A1A;
+}
+
+.dropout-preset--worst {
+  border-color: #8B1A1A;
+  color: #8B1A1A;
+}
+
+.dropout-preset--worst:hover {
+  background-color: #8B1A1A;
+  color: #FAF8F5;
+}
+
+.dropout-preset:focus-visible {
+  outline: 2px solid #8B1A1A;
+  outline-offset: 2px;
+}
+
+.dropout-preset-hint {
+  font-size: 0.75rem;
+  color: #888;
+  font-style: italic;
 }
 
 .dropout-heading {
