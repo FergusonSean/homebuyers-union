@@ -25,6 +25,7 @@
     <div class="hero__inner">
       <h1 class="hero__headline">Own your home.<br>Together.</h1>
       <p class="hero__subhead">We pool members' monthly payments to buy homes together, so the rent you'd lose to a landlord goes toward ownership — and the group gets housed years faster than anyone could alone.</p>
+      <p class="hero__stat"><strong>A whole group is housed for less total interest than one person pays</strong> on a single 30-year mortgage. Paying each home off fast means almost no interest ever accrues — many families housed for less than the bank takes from one.</p>
       <p class="hero__stat"><strong>First member home in ~4.5 years</strong> — and even the last gets in about when they'd have made it alone, for a lot less money.</p>
       <a href="#calculator" class="btn btn--primary">Try the calculator</a>
     </div>
@@ -740,6 +741,7 @@
         (parallelDues !== null ? ` Over the parallel model's full lifecycle the group pays ${formatDollars(parallelDues)} in dues.` : "");
 
       el.innerHTML = `
+        <p class="calc-headline">The whole group is housed for less <em>total</em> interest than one person pays on a single 30-year mortgage. Compare the group's rows to the <strong>Traditional</strong> column — fast pay-down means little interest ever accrues, so it's a real efficiency gain, not one member gaining at another's expense.</p>
         <p class="calc-caption">Each row is one member's outcome. <span class="cmp-better-key">Green</span> means that member beats a traditional mortgage on that measure; red means they don't. Earlier positions are housed dramatically sooner than going it alone — change the inputs to see how it shakes out for your group.</p>
         <p class="calc-note" style="margin-bottom:0.5rem">
           <span class="cmp-better-key">Green</span> = better than traditional.

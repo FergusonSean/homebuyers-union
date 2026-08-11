@@ -557,6 +557,22 @@ a.nav__wordmark:hover {
   font-style: italic;
 }
 
+.calc-headline {
+  font-size: clamp(1.05rem, 2.2vw, 1.3rem);
+  color: #1C1C1C;
+  line-height: 1.5;
+  max-width: 680px;
+  margin-bottom: 1rem;
+  padding-left: 1rem;
+  border-left: 4px solid #8B1A1A;
+  font-weight: 600;
+}
+
+.calc-headline em {
+  font-style: italic;
+  color: #8B1A1A;
+}
+
 .calc-caption {
   font-size: 1rem;
   color: #1C1C1C;
